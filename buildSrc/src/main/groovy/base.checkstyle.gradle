@@ -1,0 +1,14 @@
+plugins {
+    id "checkstyle"
+}
+
+checkstyle {
+    toolVersion = "13.9.0"
+    configFile = rootProject.file("config/checkstyle/checkstyle.xml")
+}
+
+tasks.withType(Checkstyle).configureEach {
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
