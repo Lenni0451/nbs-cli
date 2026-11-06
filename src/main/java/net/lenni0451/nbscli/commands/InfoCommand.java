@@ -32,9 +32,7 @@ public class InfoCommand {
         try {
             song = (NbsSong) NoteBlockLib.readSong(this.file.toPath(), SongFormat.NBS);
         } catch (Throwable t) {
-            System.err.println("Failed to read NBS file: " + t.getMessage());
-            t.printStackTrace(System.err);
-            return;
+            throw new ParameterException("Failed to read NBS file: " + t.getMessage(), t);
         }
 
         System.out.println("Information about " + this.file.getName() + ":");

@@ -48,9 +48,7 @@ public class ConvertCommand {
         try {
             song = NoteBlockLib.readSong(this.input);
         } catch (Throwable t) {
-            System.err.println("Failed to read input file: " + t.getMessage());
-            t.printStackTrace(System.err);
-            return;
+            throw new ParameterException("Failed to read input file: " + t.getMessage(), t);
         }
         song = NoteBlockLib.convertSong(song, this.targetFormat);
         if (this.targetFormat.equals(SongFormat.MCSP2) || this.targetFormat.equals(SongFormat.TXT)) {
@@ -63,8 +61,7 @@ public class ConvertCommand {
             NoteBlockLib.writeSong(song, this.output);
             System.out.println("Successfully converted " + this.input.getName() + " from " + song.getFormat().name() + " to " + this.output.getName() + " in " + this.targetFormat.name() + " format");
         } catch (Throwable t) {
-            System.err.println("Failed to write output file: " + t.getMessage());
-            t.printStackTrace(System.err);
+            throw new ParameterException("Failed to write output file: " + t.getMessage(), t);
         }
     }
 
