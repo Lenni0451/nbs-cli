@@ -5,6 +5,7 @@ import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.commands.ConvertCommand;
 import net.lenni0451.nbscli.commands.EditCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
+import net.lenni0451.nbscli.utils.CommandListUsageFormatter;
 
 public class Main {
 
@@ -22,7 +23,9 @@ public class Main {
                 .addCommand(edit)
                 .addCommand(render)
                 .addCommand(play)
+                .programName("nbs-cli")
                 .build();
+        jCommander.setUsageFormatter(new CommandListUsageFormatter(jCommander));
         try {
             jCommander.parse(args);
             if (main.version) {
@@ -31,6 +34,11 @@ public class Main {
             }
             if (main.help || jCommander.getParsedCommand() == null) {
                 jCommander.usage();
+                return;
+            }
+            JCommander command = jCommander.findCommandByAlias(jCommander.getParsedCommand());
+            if (((CLI.Command) command.getObjects().get(0)).help) {
+                command.usage();
                 return;
             }
             switch (jCommander.getParsedCommand()) {

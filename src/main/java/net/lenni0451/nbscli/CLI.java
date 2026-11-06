@@ -28,9 +28,17 @@ public class CLI {
         public boolean version;
     }
 
+    public abstract static class Command {
+        @Parameter(names = {"-h", "--help"},
+                description = "Show the help message of this command",
+                help = true,
+                order = Integer.MAX_VALUE)
+        public boolean help;
+    }
+
     @Parameters(commandNames = "info",
             commandDescription = "Get information about a given NBS file")
-    public static class Info {
+    public static class Info extends Command {
         @Parameter(names = {"-i", "--input"},
                 description = "The NBS file to get information about",
                 required = true,
@@ -44,7 +52,7 @@ public class CLI {
 
     @Parameters(commandNames = "convert",
             commandDescription = "Convert a given song file to a different format")
-    public static class Convert {
+    public static class Convert extends Command {
         @Parameter(names = {"-i", "--input"},
                 description = "The song file to convert. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
                 required = true,
@@ -74,7 +82,7 @@ public class CLI {
 
     @Parameters(commandNames = "edit",
             commandDescription = "Edit a song file. Edits are applied in the order: resampling, instruments, custom instruments, notes, metadata. The song keeps its format, use the convert command to change it")
-    public static class Edit {
+    public static class Edit extends Command {
         // ---------- Input/Output ----------
         @Parameter(names = {"-i", "--input"},
                 description = "The song file to edit. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
@@ -199,7 +207,7 @@ public class CLI {
 
     @Parameters(commandNames = "render",
             commandDescription = "Render a song to an audio file. Use the convert command to export to other song formats")
-    public static class Render {
+    public static class Render extends Command {
         // ---------- Input/Output ----------
         @Parameter(names = {"-i", "--input"},
                 description = "The song file to render. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
@@ -327,7 +335,7 @@ public class CLI {
 
     @Parameters(commandNames = "play",
             commandDescription = "Play a song. Controls: space to pause/resume, left/right to seek, q to quit")
-    public static class Play {
+    public static class Play extends Command {
         // ---------- Input ----------
         @Parameter(names = {"-i", "--input"},
                 description = "The song file to play. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
