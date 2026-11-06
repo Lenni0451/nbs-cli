@@ -21,6 +21,10 @@ public class Main {
                 .build();
         try {
             jCommander.parse(args);
+            if (main.version) {
+                System.out.println("NBS CLI version ${version} (${commit_hash})");
+                return;
+            }
             if (main.help || jCommander.getParsedCommand() == null) {
                 jCommander.usage();
                 return;

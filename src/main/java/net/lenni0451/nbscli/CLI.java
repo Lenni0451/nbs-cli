@@ -21,6 +21,11 @@ public class CLI {
                 description = "Show this help message",
                 help = true)
         public boolean help;
+
+        @Parameter(names = {"-v", "--version"},
+                description = "Show the version of the application",
+                help = true)
+        public boolean version;
     }
 
     @Parameters(commandNames = "info",
