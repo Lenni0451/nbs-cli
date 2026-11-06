@@ -16,6 +16,14 @@ public class IOUtils {
         }
     }
 
+    public static void log(final File output, final String message) {
+        if (isStd(output)) {
+            System.err.println(message);
+        } else {
+            System.out.println(message);
+        }
+    }
+
     public static String getExtension(final File file) {
         String name = file.getName();
         int dotIndex = name.lastIndexOf('.');

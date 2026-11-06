@@ -62,7 +62,7 @@ public class InfoCommand {
             if (!customInstruments.isEmpty()) {
                 System.out.println(SPACER.repeat(2) + "Custom (" + customInstruments.size() + "):");
                 for (NbsCustomInstrument instrument : customInstruments) {
-                    this.print(3, instrument.getNameOr("<no name>"), instrument.getSoundFilePathOr("<no sound file>"));
+                    this.print(3, "[" + song.getCustomInstruments().indexOf(instrument) + "] " + instrument.getNameOr("<no name>"), instrument.getSoundFilePathOr("<no sound file>"));
                 }
             }
 

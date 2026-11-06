@@ -3,6 +3,7 @@ package net.lenni0451.nbscli;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.commands.ConvertCommand;
+import net.lenni0451.nbscli.commands.EditCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
 
 public class Main {
@@ -11,10 +12,12 @@ public class Main {
         CLI.Main main = new CLI.Main();
         CLI.Info info = new CLI.Info();
         CLI.Convert convert = new CLI.Convert();
+        CLI.Edit edit = new CLI.Edit();
         JCommander jCommander = JCommander.newBuilder()
                 .addObject(main)
                 .addCommand(info)
                 .addCommand(convert)
+                .addCommand(edit)
                 .build();
         try {
             jCommander.parse(args);
@@ -25,6 +28,7 @@ public class Main {
             switch (jCommander.getParsedCommand()) {
                 case "info" -> new InfoCommand(info).execute();
                 case "convert" -> new ConvertCommand(convert).execute();
+                case "edit" -> new EditCommand(edit).execute();
                 default -> jCommander.usage();
             }
         } catch (ParameterException e) {
