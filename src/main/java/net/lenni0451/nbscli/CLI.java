@@ -197,6 +197,195 @@ public class CLI {
         public Integer loopStartTick;
     }
 
+    @Parameters(commandNames = "render",
+            commandDescription = "Render a song to an audio file. Use the convert command to export to other song formats")
+    public static class Render {
+        // ---------- Input/Output ----------
+        @Parameter(names = {"-i", "--input"},
+                description = "The song file to render. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                required = true,
+                placeholder = "<file.nbs>",
+                order = 0)
+        public File inputFile;
+
+        @Parameter(names = {"-if", "--input-format"},
+                description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                placeholder = "<format>",
+                order = 1)
+        public String inputFormat;
+
+        @Parameter(names = {"-o", "--output"},
+                description = "The audio file to write. The format is determined by the file extension, unless the --format option is specified. Standard output is only supported for WAV and Opus",
+                required = true,
+                placeholder = "<file.wav>",
+                order = 2)
+        public File outputFile;
+
+        @Parameter(names = {"-f", "-of", "--format", "--output-format"},
+                description = "The audio format to render to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: WAV, FLAC, MP3, Opus",
+                placeholder = "<format>",
+                order = 3)
+        public String format;
+
+        @Parameter(names = {"-w", "--overwrite"},
+                description = "Overwrite the output file if it already exists",
+                order = 4)
+        public boolean overwrite = false;
+
+        @Parameter(names = {"-q", "--quiet"},
+                description = "Don't print the render progress",
+                order = 5)
+        public boolean quiet = false;
+
+        // ---------- Audio ----------
+        @Parameter(names = "--sample-rate",
+                description = "[Audio] The sample rate in Hz, 8000-192000. Default: 48000",
+                placeholder = "<hz>",
+                order = 10)
+        public Integer sampleRate;
+
+        @Parameter(names = "--channels",
+                description = "[Audio] The channel layout. Default: stereo",
+                placeholder = "<mono|stereo>",
+                order = 11)
+        public String channels;
+
+        @Parameter(names = "--wav-encoding",
+                description = "[Audio] The PCM sample encoding (WAV). u8: unsigned 8-bit, s16/s24/s32: signed 16/24/32-bit, f32: 32-bit float. Default: s16",
+                placeholder = "<u8|s16|s24|s32|f32>",
+                order = 12)
+        public String wavEncoding;
+
+        @Parameter(names = "--flac-bits",
+                description = "[Audio] The bits per sample, 4-32 (FLAC). Default: 16",
+                placeholder = "<bits>",
+                order = 13)
+        public Integer flacBitsPerSample;
+
+        @Parameter(names = "--flac-compression",
+                description = "[Audio] The compression level, 0 (fastest) - 8 (smallest) (FLAC). Default: 6",
+                placeholder = "<level>",
+                order = 14)
+        public Integer flacCompressionLevel;
+
+        @Parameter(names = "--bitrate-mode",
+                description = "[Audio] The bitrate mode (MP3, Opus). cbr: constant, abr: average, vbr: variable. Default: vbr",
+                placeholder = "<cbr|abr|vbr>",
+                order = 15)
+        public String bitrateMode;
+
+        @Parameter(names = "--bitrate",
+                description = "[Audio] The (target) bitrate in kbps. MP3: 8-320, only used with cbr/abr, default 224. Opus: 8-384, default 128",
+                placeholder = "<kbps>",
+                order = 16)
+        public Integer bitrate;
+
+        @Parameter(names = "--quality",
+                description = "[Audio] The quality in percent, 0-100 (MP3 with vbr). Default: 80",
+                placeholder = "<percent>",
+                order = 17)
+        public Integer quality;
+
+        // ---------- Playback ----------
+        @Parameter(names = "--volume",
+                description = "[Playback] The master volume in percent, 0-100. Default: 90",
+                placeholder = "<percent>",
+                order = 20)
+        public Integer volume;
+
+        @Parameter(names = "--timing-jitter",
+                description = "[Playback] Add artificial timing jitter (±1ms), which emulates playback in Note Block Studio and makes the song sound more natural",
+                placeholder = "<true|false>",
+                arity = 1,
+                order = 21)
+        public boolean timingJitter = true;
+
+        @Parameter(names = "--sounds-dir",
+                description = "[Playback] The folder to load custom instrument sounds from. Default: the Note Block Studio sounds folder (~/Minecraft Note Block Studio/Data/Sounds)",
+                placeholder = "<folder>",
+                order = 22)
+        public File soundsDir;
+
+        // ---------- Renderer ----------
+        @Parameter(names = "--max-sounds",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, 64-131070. Default: 16384",
+                placeholder = "<n>",
+                order = 30)
+        public Integer maxSounds;
+
+        @Parameter(names = "--limiter",
+                description = "[Renderer] How to prevent clipping. windowed: adjust the volume over time, global: scale the whole song once, none: no limiting. Default: windowed",
+                placeholder = "<windowed|global|none>",
+                order = 31)
+        public String limiter;
+
+        @Parameter(names = "--multithreaded",
+                description = "[Renderer] Render the song using multiple threads",
+                order = 32)
+        public boolean multithreaded = false;
+    }
+
+    @Parameters(commandNames = "play",
+            commandDescription = "Play a song. Controls: space to pause/resume, left/right to seek, q to quit")
+    public static class Play {
+        // ---------- Input ----------
+        @Parameter(names = {"-i", "--input"},
+                description = "The song file to play. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                required = true,
+                placeholder = "<file.nbs>",
+                order = 0)
+        public File inputFile;
+
+        @Parameter(names = {"-if", "--input-format"},
+                description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                placeholder = "<format>",
+                order = 1)
+        public String inputFormat;
+
+        @Parameter(names = {"-q", "--quiet"},
+                description = "Don't print the song information and playback status",
+                order = 2)
+        public boolean quiet = false;
+
+        // ---------- Playback ----------
+        @Parameter(names = "--start",
+                description = "[Playback] The position to start playing at, as [hh:]mm:ss or a tick number. Default: the beginning of the song",
+                placeholder = "<time|tick>",
+                order = 10)
+        public String start;
+
+        @Parameter(names = "--volume",
+                description = "[Playback] The master volume in percent, 0-100. Default: 90",
+                placeholder = "<percent>",
+                order = 11)
+        public Integer volume;
+
+        @Parameter(names = "--timing-jitter",
+                description = "[Playback] Add artificial timing jitter (±1ms), which emulates playback in Note Block Studio and makes the song sound more natural",
+                placeholder = "<true|false>",
+                arity = 1,
+                order = 12)
+        public boolean timingJitter = true;
+
+        @Parameter(names = "--sounds-dir",
+                description = "[Playback] The folder to load custom instrument sounds from. Default: the Note Block Studio sounds folder (~/Minecraft Note Block Studio/Data/Sounds)",
+                placeholder = "<folder>",
+                order = 13)
+        public File soundsDir;
+
+        // ---------- Renderer ----------
+        @Parameter(names = "--max-sounds",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, 64-131070. Default: 4096",
+                placeholder = "<n>",
+                order = 20)
+        public Integer maxSounds;
+
+        @Parameter(names = "--multithreaded",
+                description = "[Renderer] Render the song using multiple threads",
+                order = 21)
+        public boolean multithreaded = false;
+    }
+
     public static class NoSplitter implements IParameterSplitter {
         @Override
         public List<String> split(final String value) {

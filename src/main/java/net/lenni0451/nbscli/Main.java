@@ -13,11 +13,15 @@ public class Main {
         CLI.Info info = new CLI.Info();
         CLI.Convert convert = new CLI.Convert();
         CLI.Edit edit = new CLI.Edit();
+        CLI.Render render = new CLI.Render();
+        CLI.Play play = new CLI.Play();
         JCommander jCommander = JCommander.newBuilder()
                 .addObject(main)
                 .addCommand(info)
                 .addCommand(convert)
                 .addCommand(edit)
+                .addCommand(render)
+                .addCommand(play)
                 .build();
         try {
             jCommander.parse(args);
@@ -33,6 +37,8 @@ public class Main {
                 case "info" -> new InfoCommand(info).execute();
                 case "convert" -> new ConvertCommand(convert).execute();
                 case "edit" -> new EditCommand(edit).execute();
+                case "render" -> System.out.println("Render command is not implemented yet");
+                case "play" -> System.out.println("Play command is not implemented yet");
                 default -> jCommander.usage();
             }
         } catch (ParameterException e) {
