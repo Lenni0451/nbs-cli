@@ -6,6 +6,7 @@ import net.lenni0451.nbscli.commands.ConvertCommand;
 import net.lenni0451.nbscli.commands.EditCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
 import net.lenni0451.nbscli.utils.CommandListUsageFormatter;
+import net.lenni0451.nbscli.utils.CommandUsageFormatter;
 
 public class Main {
 
@@ -26,6 +27,7 @@ public class Main {
                 .programName("nbs-cli")
                 .build();
         jCommander.setUsageFormatter(new CommandListUsageFormatter(jCommander));
+        jCommander.getCommands().values().forEach(command -> command.setUsageFormatter(new CommandUsageFormatter(command, jCommander.getProgramName())));
         try {
             jCommander.parse(args);
             if (main.version) {

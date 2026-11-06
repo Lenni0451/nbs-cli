@@ -19,12 +19,14 @@ public class CLI {
     public static class Main {
         @Parameter(names = {"-h", "--help"},
                 description = "Show this help message",
-                help = true)
+                help = true,
+                order = 0)
         public boolean help;
 
         @Parameter(names = {"-v", "--version"},
                 description = "Show the version of the application",
-                help = true)
+                help = true,
+                order = 1)
         public boolean version;
     }
 
@@ -32,7 +34,7 @@ public class CLI {
         @Parameter(names = {"-h", "--help"},
                 description = "Show the help message of this command",
                 help = true,
-                order = Integer.MAX_VALUE)
+                order = 1000)
         public boolean help;
     }
 
@@ -42,11 +44,13 @@ public class CLI {
         @Parameter(names = {"-i", "--input"},
                 description = "The NBS file to get information about",
                 required = true,
-                placeholder = "<file.nbs>")
+                placeholder = "<file.nbs>",
+                order = 0)
         public File file;
 
         @Parameter(names = {"-f", "--full"},
-                description = "Show full information about the NBS file")
+                description = "Show full information about the NBS file",
+                order = 1)
         public boolean full = false;
     }
 
@@ -56,27 +60,32 @@ public class CLI {
         @Parameter(names = {"-i", "--input"},
                 description = "The song file to convert. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.mid>")
+                placeholder = "<file.mid>",
+                order = 0)
         public File inputFile;
 
         @Parameter(names = {"-if", "--input-format"},
                 description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
-                placeholder = "<format>")
+                placeholder = "<format>",
+                order = 1)
         public String inputFormat;
 
         @Parameter(names = {"-o", "--output"},
                 description = "The output file to write the converted song to. The format is determined by the file extension, unless the --format option is specified. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.nbs>")
+                placeholder = "<file.nbs>",
+                order = 2)
         public File outputFile;
 
         @Parameter(names = {"-f", "-of", "--format", "--output-format"},
                 description = "The format to convert the song to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
-                placeholder = "<format>")
+                placeholder = "<format>",
+                order = 3)
         public String format;
 
         @Parameter(names = {"-w", "--overwrite"},
-                description = "Overwrite the output file if it already exists")
+                description = "Overwrite the output file if it already exists",
+                order = 4)
         public boolean overwrite = false;
     }
 
