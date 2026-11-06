@@ -9,6 +9,4 @@ plugins {
     id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
 }
 
-rootProject.name = "GradleTemplate"
-
-//include(":subproject")
+rootProject.name = "nbs-cli"
