@@ -2,6 +2,7 @@ package net.lenni0451.nbscli;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.ParameterException;
+import net.lenni0451.nbscli.commands.ConvertCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
 
 public class Main {
@@ -23,8 +24,7 @@ public class Main {
             }
             switch (jCommander.getParsedCommand()) {
                 case "info" -> new InfoCommand(info).execute();
-                case "convert" -> {
-                }
+                case "convert" -> new ConvertCommand(convert).execute();
                 default -> jCommander.usage();
             }
         } catch (ParameterException e) {

@@ -48,6 +48,10 @@ public class CLI {
                 description = "The format to convert the song to. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 placeholder = "<format>")
         public String format;
+
+        @Parameter(names = {"-w", "--overwrite"},
+                description = "Overwrite the output file if it already exists")
+        public boolean overwrite = false;
     }
 
 }
