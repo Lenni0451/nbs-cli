@@ -2,6 +2,7 @@ package net.lenni0451.nbscli.commands;
 
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
+import net.lenni0451.nbscli.utils.IOUtils;
 import net.raphimc.noteblocklib.NoteBlockLib;
 import net.raphimc.noteblocklib.format.SongFormat;
 import net.raphimc.noteblocklib.format.minecraft.MinecraftInstrument;
@@ -20,7 +21,7 @@ public class InfoCommand {
     private final boolean full;
 
     public InfoCommand(final CLI.Info info) {
-        if (!info.file.isFile()) {
+        if (!IOUtils.isStd(info.file) && !info.file.isFile()) {
             throw new ParameterException("Input file does not exist or is not a file: " + info.file.getAbsolutePath());
         }
         this.file = info.file;
@@ -30,12 +31,12 @@ public class InfoCommand {
     public void execute() {
         NbsSong song;
         try {
-            song = (NbsSong) NoteBlockLib.readSong(this.file.toPath(), SongFormat.NBS);
+            song = (NbsSong) NoteBlockLib.readSong(IOUtils.openInputStream(this.file), SongFormat.NBS, IOUtils.isStd(this.file) ? null : IOUtils.getNameWithoutExtension(this.file));
         } catch (Throwable t) {
             throw new ParameterException("Failed to read NBS file: " + t.getMessage(), t);
         }
 
-        System.out.println("Information about " + this.file.getName() + ":");
+        System.out.println("Information about " + IOUtils.getName(this.file, "STDIN") + ":");
         this.print("Title", song.getTitle());
         this.print("Author", song.getAuthor());
         this.print("Original Author", song.getOriginalAuthor());

@@ -38,14 +38,19 @@ public class CLI {
                 placeholder = "<file.mid>")
         public File inputFile;
 
+        @Parameter(names = {"-if", "--input-format"},
+                description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                placeholder = "<format>")
+        public String inputFormat;
+
         @Parameter(names = {"-o", "--output"},
                 description = "The output file to write the converted song to. The format is determined by the file extension, unless the --format option is specified. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 required = true,
                 placeholder = "<file.nbs>")
         public File outputFile;
 
-        @Parameter(names = {"-f", "--format"},
-                description = "The format to convert the song to. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
+        @Parameter(names = {"-f", "-of", "--format", "--output-format"},
+                description = "The format to convert the song to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 placeholder = "<format>")
         public String format;
 
