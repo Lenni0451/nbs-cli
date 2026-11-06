@@ -3,13 +3,13 @@ package net.lenni0451.nbscli.commands;
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
 import net.lenni0451.nbscli.model.ConverterFormats;
-import net.lenni0451.nbscli.model.MinecraftOctaveCorrection;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.raphimc.noteblocklib.NoteBlockLib;
 import net.raphimc.noteblocklib.format.SongFormat;
 import net.raphimc.noteblocklib.format.minecraft.MinecraftInstrument;
 import net.raphimc.noteblocklib.model.note.Note;
 import net.raphimc.noteblocklib.model.song.Song;
+import net.raphimc.noteblocklib.util.MinecraftOctaveCorrection;
 import net.raphimc.noteblocklib.util.SongUtil;
 
 import java.io.File;
