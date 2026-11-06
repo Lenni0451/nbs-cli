@@ -93,6 +93,13 @@ public class EditCommand {
             throw new ParameterException("Failed to read input file: " + t.getMessage(), t);
         }
 
+        if (!this.hasNoteEdits()) {
+            // Rebuilding the song loses NBS specific data like layer names, so only do it when the notes were changed
+            this.metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
+            this.write(song);
+            return;
+        }
+
         // Resampling
         if (this.edit.precomputeTempo) {
             SongResampler.precomputeTempoEvents(song);
@@ -122,9 +129,18 @@ public class EditCommand {
         this.metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
 
         SongFixer.fixForFormat(song, this.format, message -> IOUtils.log(this.output, message));
-        Song editedSong = NoteBlockLib.convertSong(song, this.format);
+        this.write(NoteBlockLib.convertSong(song, this.format));
+    }
+
+    private boolean hasNoteEdits() {
+        return this.edit.tempo != null || this.edit.precomputeTempo || !this.instrumentMappings.isEmpty() || !this.customInstrumentMappings.isEmpty()
+                || (this.edit.octaveCorrection != null && this.edit.octaveCorrection != MinecraftOctaveCorrection.NONE)
+                || this.edit.minVolume != null || this.edit.removeDuplicates;
+    }
+
+    private void write(final Song song) {
         try {
-            NoteBlockLib.writeSong(editedSong, IOUtils.openOutputStream(this.output));
+            NoteBlockLib.writeSong(song, IOUtils.openOutputStream(this.output));
             IOUtils.log(this.output, "Successfully edited " + IOUtils.getName(this.input, "STDIN") + " and saved it to " + IOUtils.getName(this.output, "STDOUT"));
         } catch (Throwable t) {
             throw new ParameterException("Failed to write output file: " + t.getMessage(), t);
