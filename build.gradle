@@ -26,8 +26,6 @@ dependencies {
     testAnnotationProcessor libs.lombok
 
     include libs.jcommander
-    include libs.noteBlockLib
     include libs.noteBlockRenderer
-    include libs.audioMixer
     include libs.bundles.jline
 }

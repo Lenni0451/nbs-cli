@@ -6,9 +6,7 @@ findbugs = { module = "com.google.code.findbugs:jsr305", version = "3.0.2" }
 jetbrainsAnnotations = { module = "org.jetbrains:annotations", version = "26.1.0" }
 lombok = { module = "org.projectlombok:lombok", version = "1.18.48" }
 jcommander = { module = "org.jcommander:jcommander", version = "3.0" }
-noteBlockLib = { module = "net.raphimc:NoteBlockLib", version = "3.4.1-20261107.200316-4" }
-noteBlockRenderer = { module = "net.raphimc:note-block-renderer", version = "1.0.0-20261107.194657-1" }
-audioMixer = { module = "net.raphimc:audio-mixer", version = "3.1.0" }
+noteBlockRenderer = { module = "net.raphimc:note-block-renderer", version = "1.0.0-20261107.223240-2" }
 
 jlineReader = { module = "org.jline:jline-reader", version.ref = "jline" }
 jlineTerminalJni = { module = "org.jline:jline-terminal-jni", version.ref = "jline" }

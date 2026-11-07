@@ -89,6 +89,7 @@ public class PlayCommand {
         try (SongPlayer player = new SongPlayer(this.openLine(), song, this.createSoundProvider(), options, startTick);
              PlayerView view = this.openView(player)) {
             player.getRootMixer().gain().set(this.play.volume / 100F);
+            player.setPaused(false);
 
             while (!this.quit && !player.hasReachedEnd()) {
                 if (view != null) view.render();

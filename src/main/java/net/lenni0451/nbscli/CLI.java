@@ -341,6 +341,12 @@ public class CLI {
                 description = "[Renderer] Render the song using multiple threads",
                 order = 32)
         public boolean multithreaded = false;
+
+        @Parameter(names = "--pre-render",
+                description = "[Renderer] The memory in MiB used to pre-render the most used notes, which speeds up rendering. 0 disables pre-rendering",
+                placeholder = "<mib>",
+                order = 33)
+        public int preRenderMemory = 512;
     }
 
     @Parameters(commandNames = "play",
