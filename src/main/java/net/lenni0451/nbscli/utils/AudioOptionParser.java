@@ -4,11 +4,17 @@ import com.beust.jcommander.ParameterException;
 import net.raphimc.audiomixer.io.flac.FlacAudioOutputStream;
 import net.raphimc.audiomixer.io.mp3.Mp3AudioOutputStream;
 import net.raphimc.audiomixer.io.ogg.opus.OggOpusAudioOutputStream;
+import net.raphimc.audiomixer.resampler.Resampler;
+import net.raphimc.audiomixer.resampler.impl.BlackmanSincResampler;
+import net.raphimc.audiomixer.resampler.impl.CubicResampler;
+import net.raphimc.audiomixer.resampler.impl.LinearResampler;
+import net.raphimc.audiomixer.resampler.impl.PointResampler;
 import net.raphimc.audiomixer.util.AudioFormat;
 import net.raphimc.audiomixer.util.PcmSampleEncoding;
 import net.raphimc.noteblockrenderer.NoteBlockRenderer;
 
 import java.util.Locale;
+import java.util.function.Supplier;
 
 public final class AudioOptionParser {
 
@@ -36,6 +42,16 @@ public final class AudioOptionParser {
         } catch (IllegalArgumentException e) {
             throw new ParameterException("Invalid limiter: " + limiter + ". Supported values are: windowed, global, none");
         }
+    }
+
+    public static Supplier<Resampler> parseResampler(final String resampler) {
+        return switch (resampler.toLowerCase(Locale.ROOT)) {
+            case "point" -> PointResampler::new;
+            case "linear" -> LinearResampler::new;
+            case "cubic" -> CubicResampler::new;
+            case "sinc" -> BlackmanSincResampler::new;
+            default -> throw new ParameterException("Invalid resampler: " + resampler + ". Supported values are: point, linear, cubic, sinc");
+        };
     }
 
     public static PcmSampleEncoding parsePcmEncoding(final String encoding) {

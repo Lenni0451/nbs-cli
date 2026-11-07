@@ -347,6 +347,12 @@ public class CLI {
                 placeholder = "<mib>",
                 order = 33)
         public int preRenderMemory = 512;
+
+        @Parameter(names = "--resampler",
+                description = "[Renderer] The resampler used to change the pitch of the instrument sounds. point: fastest, lowest quality, linear, cubic, sinc: slowest, highest quality",
+                placeholder = "<point|linear|cubic|sinc>",
+                order = 34)
+        public String resampler = "linear";
     }
 
     @Parameters(commandNames = "play",

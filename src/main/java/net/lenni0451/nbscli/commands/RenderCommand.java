@@ -14,6 +14,7 @@ import net.raphimc.audiomixer.io.mp3.Mp3AudioOutputStream;
 import net.raphimc.audiomixer.io.ogg.opus.OggOpusAudioOutputStream;
 import net.raphimc.audiomixer.io.pcm.PcmAudioOutputStream;
 import net.raphimc.audiomixer.io.wav.pcm.WavPcmAudioOutputStream;
+import net.raphimc.audiomixer.resampler.Resampler;
 import net.raphimc.audiomixer.util.AudioFormat;
 import net.raphimc.audiomixer.util.PcmSampleEncoding;
 import net.raphimc.audiomixer.util.buffer.AudioBuffer;
@@ -38,6 +39,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public class RenderCommand {
 
@@ -47,6 +49,7 @@ public class RenderCommand {
     private final AudioFileFormat outputFormat;
     private final AudioFormat audioFormat;
     private final NoteBlockRenderer.Limiter limiter;
+    private final Supplier<Resampler> resampler;
     private final CLI.Render render;
     // Only the encoding of the selected output format is set, the others are null
     private final PcmSampleEncoding pcmEncoding;
@@ -82,6 +85,7 @@ public class RenderCommand {
         this.outputFormat = AudioFileFormat.parse(render.format, this.output);
         this.audioFormat = AudioOptionParser.parseAudioFormat(render.sampleRate, render.channels);
         this.limiter = AudioOptionParser.parseLimiter(render.limiter);
+        this.resampler = AudioOptionParser.parseResampler(render.resampler);
         this.render = render;
 
         this.pcmEncoding = this.outputFormat == AudioFileFormat.WAV || this.outputFormat == AudioFileFormat.PCM ? AudioOptionParser.parsePcmEncoding(render.pcmEncoding) : null;
@@ -104,6 +108,7 @@ public class RenderCommand {
 
         AudioMixerNoteBlockRenderer.Options options = new AudioMixerNoteBlockRenderer.Options()
                 .withSoundLoadExceptionHandler(this::onSoundLoadFailure)
+                .withResamplerSupplier(this.resampler)
                 .withTimingJitter(this.render.timingJitter)
                 .withMultiThreaded(this.render.multithreaded)
                 .withMaxSimultaneousSoundCount(this.render.maxSounds);
