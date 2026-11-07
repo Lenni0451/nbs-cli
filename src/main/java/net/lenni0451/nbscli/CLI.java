@@ -325,7 +325,7 @@ public class CLI {
 
         // ---------- Renderer ----------
         @Parameter(names = "--max-sounds",
-                description = "[Renderer] The maximum amount of sounds playing at the same time, 64-131070. Default: 16384",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1. Default: 16384",
                 placeholder = "<n>",
                 order = 30)
         public Integer maxSounds;
@@ -343,7 +343,7 @@ public class CLI {
     }
 
     @Parameters(commandNames = "play",
-            commandDescription = "Play a song. Controls: space to pause/resume, left/right to seek, q to quit")
+            commandDescription = "Play a song")
     public static class Play extends Command {
         // ---------- Input ----------
         @Parameter(names = {"-i", "--input"},
@@ -375,7 +375,7 @@ public class CLI {
                 description = "[Playback] The master volume in percent, 0-100. Default: 90",
                 placeholder = "<percent>",
                 order = 11)
-        public Integer volume;
+        public int volume = 90;
 
         @Parameter(names = "--timing-jitter",
                 description = "[Playback] Add artificial timing jitter (±1ms), which emulates playback in Note Block Studio and makes the song sound more natural",
@@ -385,17 +385,17 @@ public class CLI {
         public boolean timingJitter = true;
 
         @Parameter(names = "--sounds-dir",
-                description = "[Playback] The folder to load custom instrument sounds from. Default: the Note Block Studio sounds folder (~/Minecraft Note Block Studio/Data/Sounds)",
+                description = "[Playback] The folder to load custom instrument sounds from",
                 placeholder = "<folder>",
                 order = 13)
         public File soundsDir;
 
         // ---------- Renderer ----------
         @Parameter(names = "--max-sounds",
-                description = "[Renderer] The maximum amount of sounds playing at the same time, 64-131070. Default: 4096",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1. Default: 4096",
                 placeholder = "<n>",
                 order = 20)
-        public Integer maxSounds;
+        public int maxSounds = 4096;
 
         @Parameter(names = "--multithreaded",
                 description = "[Renderer] Render the song using multiple threads",

@@ -5,6 +5,7 @@ import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.commands.ConvertCommand;
 import net.lenni0451.nbscli.commands.EditCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
+import net.lenni0451.nbscli.commands.PlayCommand;
 import net.lenni0451.nbscli.utils.CommandListUsageFormatter;
 import net.lenni0451.nbscli.utils.CommandUsageFormatter;
 
@@ -48,7 +49,7 @@ public class Main {
                 case "convert" -> new ConvertCommand(convert).execute();
                 case "edit" -> new EditCommand(edit).execute();
                 case "render" -> System.out.println("Render command is not implemented yet");
-                case "play" -> System.out.println("Play command is not implemented yet");
+                case "play" -> new PlayCommand(play).execute();
                 default -> jCommander.usage();
             }
         } catch (ParameterException e) {
