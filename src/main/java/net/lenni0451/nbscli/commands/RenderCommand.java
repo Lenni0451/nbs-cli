@@ -8,13 +8,16 @@ import net.lenni0451.nbscli.utils.AudioOptionParser;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.lenni0451.nbscli.utils.ProgressBar;
 import net.lenni0451.nbscli.utils.ResourceSoundProvider;
+import net.raphimc.audiomixer.AudioMixer;
 import net.raphimc.audiomixer.io.AudioOutputStream;
 import net.raphimc.audiomixer.io.flac.FlacAudioOutputStream;
 import net.raphimc.audiomixer.io.mp3.Mp3AudioOutputStream;
 import net.raphimc.audiomixer.io.ogg.opus.OggOpusAudioOutputStream;
 import net.raphimc.audiomixer.io.pcm.PcmAudioOutputStream;
 import net.raphimc.audiomixer.io.wav.pcm.WavPcmAudioOutputStream;
+import net.raphimc.audiomixer.processor.dynamics.GainProcessor;
 import net.raphimc.audiomixer.processor.dynamics.LimiterProcessor;
+import net.raphimc.audiomixer.processor.effect.HardClipProcessor;
 import net.raphimc.audiomixer.resampler.Resampler;
 import net.raphimc.audiomixer.util.AudioFormat;
 import net.raphimc.audiomixer.util.PcmSampleEncoding;
@@ -163,26 +166,22 @@ public class RenderCommand {
     }
 
     private void stream(final NoteBlockRenderer renderer, final ProgressBar progress) {
-        // Same processing as NoteBlockRenderer.Limiter, but applied to each tick instead of the whole song
-        LimiterProcessor limiterProcessor = this.limiter == NoteBlockRenderer.Limiter.WINDOWED ? new LimiterProcessor() : null;
-        float gain = this.render.volume / 100F;
+        // Same processing as NoteBlockRenderer.Limiter, but applied by the root mixer to every rendered buffer.
+        // StreamingNoteBlockRenderer isn't used, because its mixer always clips, even without a limiter
+        AudioMixer mixer = renderer.getRootMixer();
+        if (this.limiter == NoteBlockRenderer.Limiter.WINDOWED) mixer.processors().add(new LimiterProcessor());
+        mixer.processors().add(new GainProcessor(this.render.volume / 100F));
+        if (this.limiter == NoteBlockRenderer.Limiter.WINDOWED) mixer.processors().add(new HardClipProcessor());
         this.writeOutput(renderer.getSong(), -1, audioOutputStream -> {
             while (!renderer.hasReachedEnd()) {
-                this.writeStreamed(audioOutputStream, renderer.tick(), limiterProcessor, gain);
+                audioOutputStream.write(renderer.tick());
                 progress.update(renderer.getProgress());
             }
             // Let the last notes ring out
             while (!renderer.getMixer().isEmpty()) {
-                this.writeStreamed(audioOutputStream, renderer.getRootMixer().renderMillis(100F), limiterProcessor, gain);
+                audioOutputStream.write(mixer.renderMillis(100F));
             }
         });
-    }
-
-    private void writeStreamed(final AudioOutputStream audioOutputStream, final AudioBuffer buffer, final LimiterProcessor limiterProcessor, final float gain) throws IOException {
-        if (limiterProcessor != null) limiterProcessor.process(buffer);
-        buffer.multiply(gain);
-        if (limiterProcessor != null) buffer.clipToUnitRange();
-        audioOutputStream.write(buffer);
     }
 
     private void writeOutput(final Song song, final long sampleCount, final AudioWriter writer) {
