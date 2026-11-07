@@ -3,6 +3,7 @@ package net.lenni0451.nbscli.commands.play;
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
 import net.lenni0451.nbscli.model.ConverterFormats;
+import net.lenni0451.nbscli.utils.AudioOptionParser;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.lenni0451.nbscli.utils.ResourceSoundProvider;
 import net.raphimc.noteblocklib.NoteBlockLib;
@@ -20,12 +21,12 @@ import org.jline.terminal.TerminalBuilder;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.SourceDataLine;
 import java.io.File;
 import java.io.IOException;
 
 public class PlayCommand {
 
-    private static final AudioFormat AUDIO_FORMAT = new AudioFormat(48000, 16, 2, true, false);
     private static final int STATUS_INTERVAL_MILLIS = 100;
     private static final int TAIL_TIMEOUT_MILLIS = 10_000;
     private static final int LINE_BUFFER_PLAYOUT_MILLIS = 150;
@@ -34,6 +35,7 @@ public class PlayCommand {
     private final SongFormat format;
     private final CLI.Play play;
     private final StartPosition start;
+    private final AudioFormat audioFormat;
 
     private volatile boolean quit;
 
@@ -54,6 +56,8 @@ public class PlayCommand {
         this.format = ConverterFormats.parse(play.inputFormat, this.file, "input", ConverterFormats.INPUT_FORMATS_MAP, ConverterFormats.INPUT_FORMATS_LIST);
         this.play = play;
         this.start = play.start == null ? null : StartPosition.parse(play.start);
+        var format = AudioOptionParser.parseAudioFormat(play.sampleRate, play.channels); // The mixer format, converted to a 16-bit Java Sound format below
+        this.audioFormat = new AudioFormat(format.sampleRate(), 16, format.channelCount(), true, false);
     }
 
     public void execute() {
@@ -77,12 +81,12 @@ public class PlayCommand {
         }
 
         AudioMixerNoteBlockRenderer.Options options = new AudioMixerNoteBlockRenderer.Options()
-                .withSoundLoadExceptionHandler(PlayCommand::onSoundLoadFailure)
+                .withSoundLoadExceptionHandler(this::onSoundLoadFailure)
                 .withTimingJitter(this.play.timingJitter)
                 .withMultiThreaded(this.play.multithreaded)
                 .withMaxSimultaneousSoundCount(this.play.maxSounds);
 
-        try (SongPlayer player = new SongPlayer(AudioSystem.getSourceDataLine(AUDIO_FORMAT), song, this.createSoundProvider(), options, startTick);
+        try (SongPlayer player = new SongPlayer(this.openLine(), song, this.createSoundProvider(), options, startTick);
              PlayerView view = this.openView(player)) {
             player.getRootMixer().gain().set(this.play.volume / 100F);
 
@@ -101,7 +105,7 @@ public class PlayCommand {
             // The writer keeps feeding silence, so draining the line would block. Wait for the line buffer to play out instead
             Thread.sleep(LINE_BUFFER_PLAYOUT_MILLIS);
         } catch (LineUnavailableException e) {
-            throw new ParameterException("Failed to open audio line: " + e.getMessage(), e);
+            throw this.unsupportedFormat(e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ParameterException e) {
@@ -109,6 +113,19 @@ public class PlayCommand {
         } catch (Throwable t) {
             throw new ParameterException("Failed to play song: " + t.getMessage(), t);
         }
+    }
+
+    private SourceDataLine openLine() throws LineUnavailableException {
+        try {
+            return AudioSystem.getSourceDataLine(this.audioFormat);
+        } catch (IllegalArgumentException e) {
+            throw this.unsupportedFormat(e);
+        }
+    }
+
+    private ParameterException unsupportedFormat(final Exception cause) {
+        // The cause is printed by Main, so it isn't repeated in the message
+        return new ParameterException("Failed to open the audio device with " + (int) this.audioFormat.getSampleRate() + " Hz and " + this.audioFormat.getChannels() + " channel(s)", cause);
     }
 
     private SoundProvider createSoundProvider() {
@@ -123,7 +140,7 @@ public class PlayCommand {
         return soundProvider;
     }
 
-    private static void onSoundLoadFailure(final Instrument instrument, final Throwable t) {
+    private void onSoundLoadFailure(final Instrument instrument, final Throwable t) {
         String name;
         if (instrument instanceof NbsCustomInstrument customInstrument) {
             name = "custom instrument '" + customInstrument.getNameOr("<no name>") + "' (" + customInstrument.getSoundFilePathOr("<no sound file>") + ")";

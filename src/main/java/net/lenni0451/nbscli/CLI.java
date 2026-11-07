@@ -5,6 +5,7 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
 import com.beust.jcommander.converters.IParameterSplitter;
+import net.lenni0451.nbscli.model.AudioFileFormat;
 import net.lenni0451.nbscli.model.ConverterFormats;
 import net.lenni0451.nbscli.model.InstrumentNames;
 import net.raphimc.noteblocklib.util.MinecraftOctaveCorrection;
@@ -232,14 +233,14 @@ public class CLI {
         public String inputFormat;
 
         @Parameter(names = {"-o", "--output"},
-                description = "The audio file to write. The format is determined by the file extension, unless the --format option is specified. Standard output is only supported for WAV and Opus",
+                description = "The audio file to write. The format is determined by the file extension, unless the --format option is specified. When writing to standard output, FLAC and MP3 files don't contain the song length, so some players can't show the duration. PCM (.pcm/.raw) writes the raw samples without any header, e.g. for piping into other programs",
                 required = true,
                 placeholder = "<file.wav>",
                 order = 2)
         public File outputFile;
 
         @Parameter(names = {"-f", "-of", "--format", "--output-format"},
-                description = "The audio format to render to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: WAV, FLAC, MP3, Opus",
+                description = "The audio format to render to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: " + AudioFileFormat.FORMATS_LIST,
                 placeholder = "<format>",
                 order = 3)
         public String format;
@@ -256,59 +257,59 @@ public class CLI {
 
         // ---------- Audio ----------
         @Parameter(names = "--sample-rate",
-                description = "[Audio] The sample rate in Hz, 8000-192000. Default: 48000",
+                description = "[Audio] The sample rate in Hz. Opus only supports 8000, 12000, 16000, 24000 and 48000, other rates are resampled to the next higher one",
                 placeholder = "<hz>",
                 order = 10)
-        public Integer sampleRate;
+        public int sampleRate = 48_000;
 
         @Parameter(names = "--channels",
-                description = "[Audio] The channel layout. Default: stereo",
+                description = "[Audio] The channel layout",
                 placeholder = "<mono|stereo>",
                 order = 11)
-        public String channels;
+        public String channels = "stereo";
 
-        @Parameter(names = "--wav-encoding",
-                description = "[Audio] The PCM sample encoding (WAV). u8: unsigned 8-bit, s16/s24/s32: signed 16/24/32-bit, f32: 32-bit float. Default: s16",
+        @Parameter(names = "--pcm-encoding",
+                description = "[Audio] The sample encoding (WAV, PCM). u8: unsigned 8-bit, s16/s24/s32: signed 16/24/32-bit, f32: 32-bit float. Multi-byte encodings are little-endian",
                 placeholder = "<u8|s16|s24|s32|f32>",
                 order = 12)
-        public String wavEncoding;
+        public String pcmEncoding = "s16";
 
         @Parameter(names = "--flac-bits",
-                description = "[Audio] The bits per sample, 4-32 (FLAC). Default: 16",
+                description = "[Audio] The bits per sample, 4-32 (FLAC)",
                 placeholder = "<bits>",
                 order = 13)
-        public Integer flacBitsPerSample;
+        public int flacBitsPerSample = 16;
 
         @Parameter(names = "--flac-compression",
-                description = "[Audio] The compression level, 0 (fastest) - 8 (smallest) (FLAC). Default: 6",
+                description = "[Audio] The compression level, 0 (fastest) - 8 (smallest) (FLAC)",
                 placeholder = "<level>",
                 order = 14)
-        public Integer flacCompressionLevel;
+        public int flacCompressionLevel = 6;
 
         @Parameter(names = "--bitrate-mode",
-                description = "[Audio] The bitrate mode (MP3, Opus). cbr: constant, abr: average, vbr: variable. Default: vbr",
+                description = "[Audio] The bitrate mode (MP3, Opus). cbr: constant, abr: average (constrained variable for Opus), vbr: variable",
                 placeholder = "<cbr|abr|vbr>",
                 order = 15)
-        public String bitrateMode;
+        public String bitrateMode = "vbr";
 
         @Parameter(names = "--bitrate",
-                description = "[Audio] The (target) bitrate in kbps. MP3: 8-320, only used with cbr/abr, default 224. Opus: 8-384, default 128",
+                description = "[Audio] The (target) bitrate in kbps. MP3: 8-320, only with cbr/abr (use --mp3-quality for vbr), default 224. Opus: 6-512, default 128",
                 placeholder = "<kbps>",
                 order = 16)
         public Integer bitrate;
 
-        @Parameter(names = "--quality",
-                description = "[Audio] The quality in percent, 0-100 (MP3 with vbr). Default: 80",
+        @Parameter(names = "--mp3-quality",
+                description = "[Audio] The quality in percent, 0-100 (MP3 with vbr)",
                 placeholder = "<percent>",
                 order = 17)
-        public Integer quality;
+        public int mp3Quality = 80;
 
         // ---------- Playback ----------
         @Parameter(names = "--volume",
-                description = "[Playback] The master volume in percent, 0-100. Default: 90",
+                description = "[Playback] The master volume in percent, 0-100",
                 placeholder = "<percent>",
                 order = 20)
-        public Integer volume;
+        public int volume = 90;
 
         @Parameter(names = "--timing-jitter",
                 description = "[Playback] Add artificial timing jitter (±1ms), which emulates playback in Note Block Studio and makes the song sound more natural",
@@ -318,23 +319,23 @@ public class CLI {
         public boolean timingJitter = true;
 
         @Parameter(names = "--sounds-dir",
-                description = "[Playback] The folder to load custom instrument sounds from. Default: the Note Block Studio sounds folder (~/Minecraft Note Block Studio/Data/Sounds)",
+                description = "[Playback] An additional folder to load instrument sounds from, e.g. for custom instruments. It is searched before the Note Block Studio sounds folder",
                 placeholder = "<folder>",
                 order = 22)
         public File soundsDir;
 
         // ---------- Renderer ----------
         @Parameter(names = "--max-sounds",
-                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1. Default: 16384",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1",
                 placeholder = "<n>",
                 order = 30)
-        public Integer maxSounds;
+        public int maxSounds = 1024 * 16;
 
         @Parameter(names = "--limiter",
-                description = "[Renderer] How to prevent clipping. windowed: adjust the volume over time, global: scale the whole song once, none: no limiting. Default: windowed",
+                description = "[Renderer] How to prevent clipping. windowed: adjust the volume over time, global: scale the whole song once, none: no limiting",
                 placeholder = "<windowed|global|none>",
                 order = 31)
-        public String limiter;
+        public String limiter = "windowed";
 
         @Parameter(names = "--multithreaded",
                 description = "[Renderer] Render the song using multiple threads",
@@ -369,42 +370,55 @@ public class CLI {
                 order = 3)
         public boolean simple = false;
 
+        // ---------- Audio ----------
+        @Parameter(names = "--sample-rate",
+                description = "[Audio] The sample rate in Hz",
+                placeholder = "<hz>",
+                order = 10)
+        public int sampleRate = 48_000;
+
+        @Parameter(names = "--channels",
+                description = "[Audio] The channel layout",
+                placeholder = "<mono|stereo>",
+                order = 11)
+        public String channels = "stereo";
+
         // ---------- Playback ----------
         @Parameter(names = "--start",
                 description = "[Playback] The position to start playing at, as [hh:]mm:ss or a tick number. Default: the beginning of the song",
                 placeholder = "<time|tick>",
-                order = 10)
+                order = 20)
         public String start;
 
         @Parameter(names = "--volume",
-                description = "[Playback] The master volume in percent, 0-100. Default: 90",
+                description = "[Playback] The master volume in percent, 0-100",
                 placeholder = "<percent>",
-                order = 11)
+                order = 21)
         public int volume = 90;
 
         @Parameter(names = "--timing-jitter",
                 description = "[Playback] Add artificial timing jitter (±1ms), which emulates playback in Note Block Studio and makes the song sound more natural",
                 placeholder = "<true|false>",
                 arity = 1,
-                order = 12)
+                order = 22)
         public boolean timingJitter = true;
 
         @Parameter(names = "--sounds-dir",
-                description = "[Playback] The folder to load custom instrument sounds from",
+                description = "[Playback] An additional folder to load instrument sounds from, e.g. for custom instruments. It is searched before the Note Block Studio sounds folder",
                 placeholder = "<folder>",
-                order = 13)
+                order = 23)
         public File soundsDir;
 
         // ---------- Renderer ----------
         @Parameter(names = "--max-sounds",
-                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1. Default: 4096",
+                description = "[Renderer] The maximum amount of sounds playing at the same time, at least 1",
                 placeholder = "<n>",
-                order = 20)
+                order = 30)
         public int maxSounds = 4096;
 
         @Parameter(names = "--multithreaded",
                 description = "[Renderer] Render the song using multiple threads",
-                order = 21)
+                order = 31)
         public boolean multithreaded = false;
     }
 
