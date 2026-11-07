@@ -1,27 +1,27 @@
-package net.lenni0451.nbscli.commands;
+package net.lenni0451.nbscli.commands.play;
 
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
 import net.lenni0451.nbscli.model.ConverterFormats;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.lenni0451.nbscli.utils.ResourceSoundProvider;
-import net.raphimc.audiomixer.util.buffer.AudioBuffer;
 import net.raphimc.noteblocklib.NoteBlockLib;
 import net.raphimc.noteblocklib.format.SongFormat;
 import net.raphimc.noteblocklib.format.nbs.model.NbsCustomInstrument;
 import net.raphimc.noteblocklib.model.note.Instrument;
 import net.raphimc.noteblocklib.model.song.Song;
 import net.raphimc.noteblockrenderer.AudioMixerNoteBlockRenderer;
-import net.raphimc.noteblockrenderer.NoteBlockPlayer;
 import net.raphimc.noteblockrenderer.provider.SoundProvider;
 import net.raphimc.noteblockrenderer.provider.impl.NoteBlockStudioSoundProvider;
 import net.raphimc.noteblockrenderer.provider.impl.UrlSoundProvider;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.SourceDataLine;
 import java.io.File;
+import java.io.IOException;
 
 public class PlayCommand {
 
@@ -33,11 +33,9 @@ public class PlayCommand {
     private final File file;
     private final SongFormat format;
     private final CLI.Play play;
-    private final Position start;
+    private final StartPosition start;
 
-    private int startTick;
-    private boolean startApplied;
-    private String lastStatus = "";
+    private volatile boolean quit;
 
     public PlayCommand(final CLI.Play play) {
         if (!IOUtils.isStd(play.inputFile) && !play.inputFile.isFile()) {
@@ -55,7 +53,7 @@ public class PlayCommand {
         this.file = play.inputFile;
         this.format = ConverterFormats.parse(play.inputFormat, this.file, "input", ConverterFormats.INPUT_FORMATS_MAP, ConverterFormats.INPUT_FORMATS_LIST);
         this.play = play;
-        this.start = play.start == null ? null : Position.parse(play.start);
+        this.start = play.start == null ? null : StartPosition.parse(play.start);
     }
 
     public void execute() {
@@ -70,10 +68,11 @@ public class PlayCommand {
         if (lengthInTicks <= 0) {
             throw new ParameterException("The song does not contain any notes");
         }
+        int startTick = 0;
         if (this.start != null) {
-            this.startTick = this.start.tick ? this.start.value : song.millisecondsToTick(this.start.value);
-            if (this.startTick < 0 || this.startTick >= lengthInTicks) {
-                throw new ParameterException("Start position " + this.play.start + " is outside of the song (length: " + formatTime(song.getLengthInMilliseconds(), song.getLengthInMilliseconds()) + ", " + lengthInTicks + " ticks)");
+            startTick = this.start.toTick(song);
+            if (startTick < 0 || startTick >= lengthInTicks) {
+                throw new ParameterException("Start position " + this.play.start + " is outside of the song (length: " + TimeFormat.format(song.getLengthInMilliseconds(), song.getLengthInMilliseconds()) + ", " + lengthInTicks + " ticks)");
             }
         }
 
@@ -83,24 +82,24 @@ public class PlayCommand {
                 .withMultiThreaded(this.play.multithreaded)
                 .withMaxSimultaneousSoundCount(this.play.maxSounds);
 
-        try (Player player = new Player(AudioSystem.getSourceDataLine(AUDIO_FORMAT), song, this.createSoundProvider(), options)) {
+        try (SongPlayer player = new SongPlayer(AudioSystem.getSourceDataLine(AUDIO_FORMAT), song, this.createSoundProvider(), options, startTick);
+             PlayerView view = this.openView(player)) {
             player.getRootMixer().gain().set(this.play.volume / 100F);
-            if (!this.play.quiet) this.printInfo(song);
 
-            while (!player.hasReachedEnd()) {
-                this.printStatus(player);
+            while (!this.quit && !player.hasReachedEnd()) {
+                if (view != null) view.render();
                 Thread.sleep(STATUS_INTERVAL_MILLIS);
             }
+            if (this.quit) return;
 
             // Let the last notes ring out before closing the audio line
             long tailEnd = System.currentTimeMillis() + TAIL_TIMEOUT_MILLIS;
-            while (!player.isMixerEmpty() && System.currentTimeMillis() < tailEnd) {
+            while (!this.quit && !player.isMixerEmpty() && System.currentTimeMillis() < tailEnd) {
+                if (view != null) view.render();
                 Thread.sleep(STATUS_INTERVAL_MILLIS);
             }
             // The writer keeps feeding silence, so draining the line would block. Wait for the line buffer to play out instead
             Thread.sleep(LINE_BUFFER_PLAYOUT_MILLIS);
-            this.printStatus(player);
-            if (!this.play.quiet) System.out.println();
         } catch (LineUnavailableException e) {
             throw new ParameterException("Failed to open audio line: " + e.getMessage(), e);
         } catch (InterruptedException e) {
@@ -134,87 +133,17 @@ public class PlayCommand {
         System.err.println("Failed to load the sound for " + name + ", its notes will not be played. Use --sounds-dir to specify the folder containing the sound file");
     }
 
-    private void printInfo(final Song song) {
-        System.out.println("Playing " + song.getTitleOrFileNameOr(IOUtils.getName(this.file, "STDIN")));
-        if (song.getAuthor() != null && !song.getAuthor().isBlank()) {
-            System.out.println("  Author: " + song.getAuthor());
+    private PlayerView openView(final SongPlayer player) throws IOException {
+        if (this.play.quiet) return null;
+        String title = player.getSong().getTitleOrFileNameOr(IOUtils.getName(this.file, "STDIN"));
+        if (this.play.simple) return new SimpleView(player, title);
+        Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).build();
+        if (Terminal.TYPE_DUMB.equals(terminal.getType()) || Terminal.TYPE_DUMB_COLOR.equals(terminal.getType())) {
+            // Not an interactive terminal (e.g. output is redirected), fall back to the simple progress output
+            terminal.close();
+            return new SimpleView(player, title);
         }
-        if (song.getOriginalAuthor() != null && !song.getOriginalAuthor().isBlank()) {
-            System.out.println("  Original Author: " + song.getOriginalAuthor());
-        }
-        System.out.println("  Length: " + formatTime(song.getLengthInMilliseconds(), song.getLengthInMilliseconds()));
-        System.out.println("  Notes: " + "%,d".formatted(song.getNotes().getNoteCount()));
-    }
-
-    private void printStatus(final Player player) {
-        if (this.play.quiet) return;
-        Song song = player.getSong();
-        int length = song.getLengthInMilliseconds();
-        int position = Math.min(player.getMillisecondPosition(), length);
-        String status = "Playing " + formatTime(position, length) + " / " + formatTime(length, length);
-        if (status.equals(this.lastStatus)) return;
-        System.out.print("\r" + status + " ".repeat(Math.max(0, this.lastStatus.length() - status.length())));
-        System.out.flush();
-        this.lastStatus = status;
-    }
-
-    private static String formatTime(final int millis, final int lengthMillis) {
-        int seconds = Math.max(0, millis) / 1000;
-        if (lengthMillis >= 3_600_000) {
-            return String.format("%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60);
-        } else {
-            return String.format("%02d:%02d", seconds / 60, seconds % 60);
-        }
-    }
-
-
-    private final class Player extends NoteBlockPlayer {
-        private Player(final SourceDataLine sourceDataLine, final Song song, final SoundProvider soundProvider, final Options options) throws LineUnavailableException {
-            super(sourceDataLine, song, soundProvider, options);
-        }
-
-        @Override
-        public synchronized AudioBuffer tick() {
-            if (!PlayCommand.this.startApplied) {
-                PlayCommand.this.startApplied = true;
-                this.setTick(PlayCommand.this.startTick);
-            }
-            return super.tick();
-        }
-
-        private synchronized boolean isMixerEmpty() {
-            return this.getMixer().isEmpty();
-        }
-    }
-
-    private record Position(int value, boolean tick) {
-        private static Position parse(final String input) {
-            String value = input.trim();
-            try {
-                if (value.chars().allMatch(Character::isDigit) && !value.isEmpty()) {
-                    return new Position(Integer.parseInt(value), true);
-                }
-                String[] parts = value.split(":", -1);
-                if (parts.length == 2 || parts.length == 3) {
-                    int hours = parts.length == 3 ? parseTimePart(parts[0], Integer.MAX_VALUE) : 0;
-                    int minutes = parseTimePart(parts[parts.length - 2], parts.length == 3 ? 59 : Integer.MAX_VALUE);
-                    int seconds = parseTimePart(parts[parts.length - 1], 59);
-                    long millis = ((long) hours * 3600 + (long) minutes * 60 + seconds) * 1000;
-                    if (millis <= Integer.MAX_VALUE) {
-                        return new Position((int) millis, false);
-                    }
-                }
-            } catch (Throwable ignored) {
-            }
-            throw new ParameterException("Invalid start position: " + input + ". Expected [hh:]mm:ss or a tick number");
-        }
-
-        private static int parseTimePart(final String part, final int max) {
-            if (part.isEmpty() || !part.chars().allMatch(Character::isDigit)) throw new NumberFormatException(part);
-            int value = Integer.parseInt(part);
-            if (value > max) throw new NumberFormatException(part);
-            return value;
-        }
+        return new TuiView(terminal, player, title, this.play.volume, () -> this.quit = true);
     }
 
 }

@@ -5,7 +5,7 @@ import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.commands.ConvertCommand;
 import net.lenni0451.nbscli.commands.EditCommand;
 import net.lenni0451.nbscli.commands.InfoCommand;
-import net.lenni0451.nbscli.commands.PlayCommand;
+import net.lenni0451.nbscli.commands.play.PlayCommand;
 import net.lenni0451.nbscli.utils.CommandListUsageFormatter;
 import net.lenni0451.nbscli.utils.CommandUsageFormatter;
 

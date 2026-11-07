@@ -343,7 +343,7 @@ public class CLI {
     }
 
     @Parameters(commandNames = "play",
-            commandDescription = "Play a song")
+            commandDescription = "Play a song. Controls: space to pause/resume, left/right to seek, up/down to change the volume, q to quit")
     public static class Play extends Command {
         // ---------- Input ----------
         @Parameter(names = {"-i", "--input"},
@@ -360,9 +360,14 @@ public class CLI {
         public String inputFormat;
 
         @Parameter(names = {"-q", "--quiet"},
-                description = "Don't print the song information and playback status",
+                description = "Don't show any playback output",
                 order = 2)
         public boolean quiet = false;
+
+        @Parameter(names = "--simple",
+                description = "Show a simple progress line instead of the player UI. Used automatically when the terminal is not interactive",
+                order = 3)
+        public boolean simple = false;
 
         // ---------- Playback ----------
         @Parameter(names = "--start",
