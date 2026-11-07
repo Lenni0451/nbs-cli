@@ -255,6 +255,11 @@ public class CLI {
                 order = 5)
         public boolean quiet = false;
 
+        @Parameter(names = "--stream",
+                description = "Write the audio while rendering instead of rendering the whole song first, e.g. to pipe it into a player. Also uses less memory. Not supported with WAV and the global limiter",
+                order = 6)
+        public boolean stream = false;
+
         // ---------- Audio ----------
         @Parameter(names = "--sample-rate",
                 description = "[Audio] The sample rate in Hz. Opus only supports 8000, 12000, 16000, 24000 and 48000, other rates are resampled to the next higher one",

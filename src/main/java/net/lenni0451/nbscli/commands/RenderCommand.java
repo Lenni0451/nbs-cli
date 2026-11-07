@@ -14,6 +14,7 @@ import net.raphimc.audiomixer.io.mp3.Mp3AudioOutputStream;
 import net.raphimc.audiomixer.io.ogg.opus.OggOpusAudioOutputStream;
 import net.raphimc.audiomixer.io.pcm.PcmAudioOutputStream;
 import net.raphimc.audiomixer.io.wav.pcm.WavPcmAudioOutputStream;
+import net.raphimc.audiomixer.processor.dynamics.LimiterProcessor;
 import net.raphimc.audiomixer.resampler.Resampler;
 import net.raphimc.audiomixer.util.AudioFormat;
 import net.raphimc.audiomixer.util.PcmSampleEncoding;
@@ -92,6 +93,12 @@ public class RenderCommand {
         this.resampler = AudioOptionParser.parseResampler(render.resampler);
         this.preRenderMemory = Objects.requireNonNullElseGet(render.preRenderMemory, () -> render.multithreaded ? 0 : DEFAULT_PRE_RENDER_MEMORY);
         this.render = render;
+        if (render.stream && this.outputFormat == AudioFileFormat.WAV) {
+            throw new ParameterException("WAV needs the length of the song before writing and can't be streamed. Use PCM, FLAC, MP3 or Opus with --stream");
+        }
+        if (render.stream && this.limiter == NoteBlockRenderer.Limiter.GLOBAL) {
+            throw new ParameterException("The global limiter needs the whole song and can't be used with --stream. Use the windowed limiter or none");
+        }
 
         this.pcmEncoding = this.outputFormat == AudioFileFormat.WAV || this.outputFormat == AudioFileFormat.PCM ? AudioOptionParser.parsePcmEncoding(render.pcmEncoding) : null;
         this.flacEncoding = this.outputFormat == AudioFileFormat.FLAC ? AudioOptionParser.createFlacEncoding(render.flacBitsPerSample, render.flacCompressionLevel) : null;
@@ -124,13 +131,19 @@ public class RenderCommand {
                 renderer.preRenderMostUsedNotes(progress::update, this.preRenderMemory * 1024L * 1024L);
                 progress.finish();
             }
-            progress.start("Rendering");
-            AudioBuffer buffer = renderer.renderFully(progress::update, this.render.volume, this.limiter);
-            progress.finish();
+            if (this.render.stream) {
+                progress.start("Rendering");
+                this.stream(renderer, progress);
+                progress.finish();
+            } else {
+                progress.start("Rendering");
+                AudioBuffer buffer = renderer.renderFully(progress::update, this.render.volume, this.limiter);
+                progress.finish();
 
-            progress.start("Encoding");
-            this.write(song, buffer, progress);
-            progress.finish();
+                progress.start("Encoding");
+                this.write(song, buffer, progress);
+                progress.finish();
+            }
         }
         if (!this.render.quiet) {
             IOUtils.log(this.output, "Successfully rendered " + IOUtils.getName(this.input, "STDIN") + " to " + IOUtils.getName(this.output, "STDOUT") + " in " + this.outputFormat + " format");
@@ -138,8 +151,7 @@ public class RenderCommand {
     }
 
     private void write(final Song song, final AudioBuffer buffer, final ProgressBar progress) {
-        try (OutputStream outputStream = this.openOutputStream();
-             AudioOutputStream audioOutputStream = this.createAudioOutputStream(outputStream, song, buffer)) {
+        this.writeOutput(song, buffer.sampleCount(), audioOutputStream -> {
             float[] samples = buffer.samples();
             int chunkSize = this.audioFormat.millisToSampleCount(1000F);
             for (int offset = 0; offset < samples.length; offset += chunkSize) {
@@ -147,6 +159,36 @@ public class RenderCommand {
                 audioOutputStream.write(samples, offset, length);
                 progress.update((float) (offset + length) / samples.length * 100F);
             }
+        });
+    }
+
+    private void stream(final NoteBlockRenderer renderer, final ProgressBar progress) {
+        // Same processing as NoteBlockRenderer.Limiter, but applied to each tick instead of the whole song
+        LimiterProcessor limiterProcessor = this.limiter == NoteBlockRenderer.Limiter.WINDOWED ? new LimiterProcessor() : null;
+        float gain = this.render.volume / 100F;
+        this.writeOutput(renderer.getSong(), -1, audioOutputStream -> {
+            while (!renderer.hasReachedEnd()) {
+                this.writeStreamed(audioOutputStream, renderer.tick(), limiterProcessor, gain);
+                progress.update(renderer.getProgress());
+            }
+            // Let the last notes ring out
+            while (!renderer.getMixer().isEmpty()) {
+                this.writeStreamed(audioOutputStream, renderer.getRootMixer().renderMillis(100F), limiterProcessor, gain);
+            }
+        });
+    }
+
+    private void writeStreamed(final AudioOutputStream audioOutputStream, final AudioBuffer buffer, final LimiterProcessor limiterProcessor, final float gain) throws IOException {
+        if (limiterProcessor != null) limiterProcessor.process(buffer);
+        buffer.multiply(gain);
+        if (limiterProcessor != null) buffer.clipToUnitRange();
+        audioOutputStream.write(buffer);
+    }
+
+    private void writeOutput(final Song song, final long sampleCount, final AudioWriter writer) {
+        try (OutputStream outputStream = this.openOutputStream();
+             AudioOutputStream audioOutputStream = this.createAudioOutputStream(outputStream, song, sampleCount)) {
+            writer.write(audioOutputStream);
         } catch (Throwable t) {
             if (!IOUtils.isStd(this.output)) this.output.delete(); // Don't leave a broken file behind
             throw new ParameterException("Failed to write output file: " + t.getMessage(), t);
@@ -161,9 +203,9 @@ public class RenderCommand {
         return new SeekableBufferedOutputStream(new SeekableFileOutputStream(this.output));
     }
 
-    private AudioOutputStream createAudioOutputStream(final OutputStream outputStream, final Song song, final AudioBuffer buffer) throws IOException {
+    private AudioOutputStream createAudioOutputStream(final OutputStream outputStream, final Song song, final long sampleCount) throws IOException {
         return switch (this.outputFormat) {
-            case WAV -> new WavPcmAudioOutputStream(outputStream, this.audioFormat, this.pcmEncoding, buffer.sampleCount());
+            case WAV -> new WavPcmAudioOutputStream(outputStream, this.audioFormat, this.pcmEncoding, sampleCount);
             case PCM -> new PcmAudioOutputStream(outputStream, this.audioFormat, this.pcmEncoding);
             case FLAC -> new FlacAudioOutputStream(outputStream, this.audioFormat, this.flacEncoding, this.getVorbisTags(song));
             case MP3 -> new Mp3AudioOutputStream(outputStream, this.audioFormat, this.mp3Encoding, this.getMp3Tags(song));
@@ -203,6 +245,12 @@ public class RenderCommand {
         Mp3AudioOutputStream.Id3Tags tags = MetadataUtil.getMp3Tags(song);
         tags = tags.withCustomField("Application", "nbs-cli");
         return tags;
+    }
+
+
+    @FunctionalInterface
+    private interface AudioWriter {
+        void write(AudioOutputStream audioOutputStream) throws IOException;
     }
 
 }
