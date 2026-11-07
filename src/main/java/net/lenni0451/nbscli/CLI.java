@@ -343,10 +343,10 @@ public class CLI {
         public boolean multithreaded = false;
 
         @Parameter(names = "--pre-render",
-                description = "[Renderer] The memory in MiB used to pre-render the most used notes, which speeds up rendering. 0 disables pre-rendering",
+                description = "[Renderer] The memory in MiB used to pre-render the most used notes, which speeds up rendering. 0 disables pre-rendering. Default: 512, or 0 with --multithreaded",
                 placeholder = "<mib>",
                 order = 33)
-        public int preRenderMemory = 512;
+        public Integer preRenderMemory;
 
         @Parameter(names = "--resampler",
                 description = "[Renderer] The resampler used to change the pitch of the instrument sounds. point: fastest, lowest quality, linear, cubic, sinc: slowest, highest quality",

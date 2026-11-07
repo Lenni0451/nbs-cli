@@ -39,9 +39,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 public class RenderCommand {
+
+    private static final int DEFAULT_PRE_RENDER_MEMORY = 512;
 
     private final File input;
     private final File output;
@@ -50,6 +53,7 @@ public class RenderCommand {
     private final AudioFormat audioFormat;
     private final NoteBlockRenderer.Limiter limiter;
     private final Supplier<Resampler> resampler;
+    private final int preRenderMemory;
     private final CLI.Render render;
     // Only the encoding of the selected output format is set, the others are null
     private final PcmSampleEncoding pcmEncoding;
@@ -76,7 +80,7 @@ public class RenderCommand {
         if (render.maxSounds < 1) {
             throw new ParameterException("Max sounds must be at least 1: " + render.maxSounds);
         }
-        if (render.preRenderMemory < 0) {
+        if (render.preRenderMemory != null && render.preRenderMemory < 0) {
             throw new ParameterException("Pre-render memory must be at least 0: " + render.preRenderMemory);
         }
         this.input = render.inputFile;
@@ -86,6 +90,7 @@ public class RenderCommand {
         this.audioFormat = AudioOptionParser.parseAudioFormat(render.sampleRate, render.channels);
         this.limiter = AudioOptionParser.parseLimiter(render.limiter);
         this.resampler = AudioOptionParser.parseResampler(render.resampler);
+        this.preRenderMemory = Objects.requireNonNullElseGet(render.preRenderMemory, () -> render.multithreaded ? 0 : DEFAULT_PRE_RENDER_MEMORY);
         this.render = render;
 
         this.pcmEncoding = this.outputFormat == AudioFileFormat.WAV || this.outputFormat == AudioFileFormat.PCM ? AudioOptionParser.parsePcmEncoding(render.pcmEncoding) : null;
@@ -114,9 +119,9 @@ public class RenderCommand {
                 .withMaxSimultaneousSoundCount(this.render.maxSounds);
         NoteBlockRenderer renderer = new NoteBlockRenderer(song, this.audioFormat, this.createSoundProvider(), options);
         try (ProgressBar progress = ProgressBar.open(this.render.quiet)) {
-            if (this.render.preRenderMemory > 0) {
+            if (this.preRenderMemory > 0) {
                 progress.start("Pre-rendering");
-                renderer.preRenderMostUsedNotes(progress::update, this.render.preRenderMemory * 1024L * 1024L);
+                renderer.preRenderMostUsedNotes(progress::update, this.preRenderMemory * 1024L * 1024L);
                 progress.finish();
             }
             progress.start("Rendering");
