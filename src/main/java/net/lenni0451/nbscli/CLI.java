@@ -1,9 +1,6 @@
 package net.lenni0451.nbscli;
 
-import com.beust.jcommander.IStringConverter;
-import com.beust.jcommander.Parameter;
-import com.beust.jcommander.ParameterException;
-import com.beust.jcommander.Parameters;
+import com.beust.jcommander.*;
 import com.beust.jcommander.converters.IParameterSplitter;
 import net.lenni0451.nbscli.model.AudioFileFormat;
 import net.lenni0451.nbscli.model.ConverterFormats;
@@ -31,6 +28,23 @@ public class CLI {
         public boolean version;
     }
 
+    public static class BatchOptions {
+        @Parameter(names = {"-r", "--recursive"},
+                description = "Also search the sub folders of the given input folders. The folder structure is kept when writing to an output folder",
+                order = 7)
+        public boolean recursive = false;
+
+        @Parameter(names = "--fail-fast",
+                description = "Stop on the first file that fails instead of continuing with the next one",
+                order = 8)
+        public boolean failFast = false;
+
+        @Parameter(names = "--ignore-extension",
+                description = "Read all files found in input folders, not only the ones with a supported file extension. Requires --input-format if the command has it",
+                order = 9)
+        public boolean ignoreExtension = false;
+    }
+
     public abstract static class Command {
         @Parameter(names = {"-h", "--help"},
                 description = "Show the help message of this command",
@@ -40,30 +54,35 @@ public class CLI {
     }
 
     @Parameters(commandNames = "info",
-            commandDescription = "Get information about a given NBS file")
+            commandDescription = "Get information about one or more NBS files")
     public static class Info extends Command {
         @Parameter(names = {"-i", "--input"},
-                description = "The NBS file to get information about",
+                description = "The NBS files or folders to get information about. Folders are searched for .nbs files. Use - to read from standard input",
                 required = true,
-                placeholder = "<file.nbs>",
+                placeholder = "<file.nbs|folder>...",
+                variableArity = true,
                 order = 0)
-        public File file;
+        public List<File> files;
 
         @Parameter(names = {"-f", "--full"},
-                description = "Show full information about the NBS file",
+                description = "Show full information about the NBS files",
                 order = 1)
         public boolean full = false;
+
+        @ParametersDelegate
+        public BatchOptions batch = new BatchOptions();
     }
 
     @Parameters(commandNames = "convert",
-            commandDescription = "Convert a given song file to a different format")
+            commandDescription = "Convert one or more song files to a different format")
     public static class Convert extends Command {
         @Parameter(names = {"-i", "--input"},
-                description = "The song file to convert. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                description = "The song files or folders to convert. Folders are searched for files with a supported extension (or only the --input-format if specified). Use - to read from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.mid>",
+                placeholder = "<file.mid|folder>...",
+                variableArity = true,
                 order = 0)
-        public File inputFile;
+        public List<File> inputFiles;
 
         @Parameter(names = {"-if", "--input-format"},
                 description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
@@ -72,34 +91,38 @@ public class CLI {
         public String inputFormat;
 
         @Parameter(names = {"-o", "--output"},
-                description = "The output file to write the converted song to. The format is determined by the file extension, unless the --format option is specified. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
+                description = "The output file to write the converted song to. The format is determined by the file extension, unless the --format option is specified. When converting multiple files or folders, this is the folder to write the converted songs to. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.nbs>",
+                placeholder = "<file.nbs|folder>",
                 order = 2)
         public File outputFile;
 
         @Parameter(names = {"-f", "-of", "--format", "--output-format"},
-                description = "The format to convert the song to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
+                description = "The format to convert the song to. Required if the file extension can't be used to determine the format, when writing to standard output, or when converting multiple files or folders. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 placeholder = "<format>",
                 order = 3)
         public String format;
 
         @Parameter(names = {"-w", "--overwrite"},
-                description = "Overwrite the output file if it already exists",
+                description = "Overwrite the output files if they already exist",
                 order = 4)
         public boolean overwrite = false;
+
+        @ParametersDelegate
+        public BatchOptions batch = new BatchOptions();
     }
 
     @Parameters(commandNames = "edit",
-            commandDescription = "Edit a song file. Edits are applied in the order: resampling, instruments, custom instruments, notes, metadata. The song keeps its format, use the convert command to change it")
+            commandDescription = "Edit one or more song files. Edits are applied in the order: resampling, instruments, custom instruments, notes, metadata. The song keeps its format, use the convert command to change it")
     public static class Edit extends Command {
         // ---------- Input/Output ----------
         @Parameter(names = {"-i", "--input"},
-                description = "The song file to edit. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
+                description = "The song files or folders to edit. Folders are searched for files with a supported extension (or only the --input-format if specified). Use - to read from standard input. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.nbs>",
+                placeholder = "<file.nbs|folder>...",
+                variableArity = true,
                 order = 0)
-        public File inputFile;
+        public List<File> inputFiles;
 
         @Parameter(names = {"-if", "--input-format"},
                 description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.OUTPUT_FORMATS_LIST,
@@ -108,16 +131,19 @@ public class CLI {
         public String inputFormat;
 
         @Parameter(names = {"-o", "--output"},
-                description = "The file to write the edited song to. The song is written in the same format as the input. May be the same file as the input when used with --overwrite",
+                description = "The file to write the edited song to. The song is written in the same format as the input. May be the same file as the input when used with --overwrite. When editing multiple files or folders, this is the folder to write the edited songs to (may be the input folder when used with --overwrite)",
                 required = true,
-                placeholder = "<file.nbs>",
+                placeholder = "<file.nbs|folder>",
                 order = 2)
         public File outputFile;
 
         @Parameter(names = {"-w", "--overwrite"},
-                description = "Overwrite the output file if it already exists",
+                description = "Overwrite the output files if they already exist",
                 order = 3)
         public boolean overwrite = false;
+
+        @ParametersDelegate
+        public BatchOptions batch = new BatchOptions();
 
         // ---------- Resampling ----------
         @Parameter(names = "--tempo",
@@ -140,7 +166,7 @@ public class CLI {
         public List<String> instruments = new ArrayList<>();
 
         @Parameter(names = "--custom-instrument",
-                description = "[Instruments] Replace a custom instrument with a vanilla one or remove it (NBS only). Can be specified multiple times. The custom instrument is selected by its index (as shown by 'info --full') or its name",
+                description = "[Instruments] Replace a custom instrument with a vanilla one or remove it (NBS only). Can be specified multiple times. The custom instrument is selected by its index (as shown by 'info --full') or its name. When editing multiple files, selecting by name is usually the better choice",
                 placeholder = "<index|name>=<to|remove>",
                 splitter = NoSplitter.class,
                 order = 21)
@@ -216,15 +242,16 @@ public class CLI {
     }
 
     @Parameters(commandNames = "render",
-            commandDescription = "Render a song to an audio file. Use the convert command to export to other song formats")
+            commandDescription = "Render one or more songs to audio files. Use the convert command to export to other song formats")
     public static class Render extends Command {
         // ---------- Input/Output ----------
         @Parameter(names = {"-i", "--input"},
-                description = "The song file to render. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
+                description = "The song files or folders to render. Folders are searched for files with a supported extension (or only the --input-format if specified). Use - to read from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
                 required = true,
-                placeholder = "<file.nbs>",
+                placeholder = "<file.nbs|folder>...",
+                variableArity = true,
                 order = 0)
-        public File inputFile;
+        public List<File> inputFiles;
 
         @Parameter(names = {"-if", "--input-format"},
                 description = "The format of the input song. Required when reading from standard input. Supported formats are: " + ConverterFormats.INPUT_FORMATS_LIST,
@@ -233,20 +260,20 @@ public class CLI {
         public String inputFormat;
 
         @Parameter(names = {"-o", "--output"},
-                description = "The audio file to write. The format is determined by the file extension, unless the --format option is specified. When writing to standard output, FLAC and MP3 files don't contain the song length, so some players can't show the duration. PCM (.pcm/.raw) writes the raw samples without any header, e.g. for piping into other programs",
+                description = "The audio file to write. The format is determined by the file extension, unless the --format option is specified. When writing to standard output, FLAC and MP3 files don't contain the song length, so some players can't show the duration. PCM (.pcm/.raw) writes the raw samples without any header, e.g. for piping into other programs. When rendering multiple files or folders, this is the folder to write the audio files to",
                 required = true,
-                placeholder = "<file.wav>",
+                placeholder = "<file.wav|folder>",
                 order = 2)
         public File outputFile;
 
         @Parameter(names = {"-f", "-of", "--format", "--output-format"},
-                description = "The audio format to render to. Required if the file extension can't be used to determine the format, or when writing to standard output. Supported formats are: " + AudioFileFormat.FORMATS_LIST,
+                description = "The audio format to render to. Required if the file extension can't be used to determine the format, when writing to standard output, or when rendering multiple files or folders. Supported formats are: " + AudioFileFormat.FORMATS_LIST,
                 placeholder = "<format>",
                 order = 3)
         public String format;
 
         @Parameter(names = {"-w", "--overwrite"},
-                description = "Overwrite the output file if it already exists",
+                description = "Overwrite the output files if they already exist",
                 order = 4)
         public boolean overwrite = false;
 
@@ -259,6 +286,9 @@ public class CLI {
                 description = "Write the audio while rendering instead of rendering the whole song first, e.g. to pipe it into a player. Also uses less memory. Not supported with WAV and the global limiter",
                 order = 6)
         public boolean stream = false;
+
+        @ParametersDelegate
+        public BatchOptions batch = new BatchOptions();
 
         // ---------- Audio ----------
         @Parameter(names = "--sample-rate",

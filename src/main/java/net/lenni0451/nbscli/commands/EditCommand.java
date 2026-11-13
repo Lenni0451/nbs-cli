@@ -3,7 +3,9 @@ package net.lenni0451.nbscli.commands;
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
 import net.lenni0451.nbscli.model.ConverterFormats;
+import net.lenni0451.nbscli.model.InputFile;
 import net.lenni0451.nbscli.model.InstrumentNames;
+import net.lenni0451.nbscli.utils.BatchProcessor;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.lenni0451.nbscli.utils.SongFixer;
 import net.raphimc.noteblocklib.NoteBlockLib;
@@ -26,30 +28,31 @@ public class EditCommand {
 
     private static final String REMOVE = "remove";
 
-    private final File input;
-    private final File output;
-    private final SongFormat format;
+    private final List<Job> jobs = new ArrayList<>();
     private final CLI.Edit edit;
 
     // Vanilla instrument -> replacement, null value means remove
     private final Map<MinecraftInstrument, MinecraftInstrument> instrumentMappings = new EnumMap<>(MinecraftInstrument.class);
     // Custom instrument selector (index or name) -> replacement, null value means remove. Resolved after the song is loaded
     private final Map<String, MinecraftInstrument> customInstrumentMappings = new LinkedHashMap<>();
-    private final List<Consumer<Song>> metadataEdits = new ArrayList<>();
+    // The metadata edits for each input format, as the supported options depend on the format
+    private final Map<SongFormat, List<Consumer<Song>>> metadataEdits = new EnumMap<>(SongFormat.class);
 
     public EditCommand(final CLI.Edit edit) {
-        if (!IOUtils.isStd(edit.inputFile) && !edit.inputFile.isFile()) {
-            throw new ParameterException("Input file does not exist or is not a file: " + edit.inputFile.getAbsolutePath());
+        List<InputFile> inputs = IOUtils.resolveInputs(edit.inputFiles, edit.batch.recursive, ConverterFormats.folderFilter(edit.inputFormat, edit.batch.ignoreExtension, ConverterFormats.OUTPUT_FORMATS, ConverterFormats.OUTPUT_FORMATS_LIST));
+        if (inputs.isEmpty()) {
+            throw new ParameterException("No supported song files found in the given folders");
         }
-        if (!IOUtils.isStd(edit.outputFile) && edit.outputFile.exists() && !edit.overwrite) {
-            throw new ParameterException("Output file already exists and overwrite is not allowed: " + edit.outputFile.getAbsolutePath());
+        boolean batch = IOUtils.isBatch(edit.inputFiles);
+        if (batch) IOUtils.validateOutputFolder(edit.outputFile);
+        Map<InputFile, File> outputs = new LinkedHashMap<>();
+        for (InputFile input : inputs) {
+            SongFormat format = ConverterFormats.parse(edit.inputFormat, input.file(), "input", ConverterFormats.OUTPUT_FORMATS, ConverterFormats.OUTPUT_FORMATS_LIST);
+            File output = batch ? input.getOutputFile(edit.outputFile, null) : edit.outputFile;
+            outputs.put(input, output);
+            this.jobs.add(new Job(input, format, output));
         }
-        if (!IOUtils.isStd(edit.outputFile) && edit.outputFile.isDirectory()) {
-            throw new ParameterException("Output file is a directory: " + edit.outputFile.getAbsolutePath());
-        }
-        this.input = edit.inputFile;
-        this.output = edit.outputFile;
-        this.format = ConverterFormats.parse(edit.inputFormat, this.input, "input", ConverterFormats.OUTPUT_FORMATS, ConverterFormats.OUTPUT_FORMATS_LIST);
+        IOUtils.validateOutputFiles(outputs, edit.overwrite);
         this.edit = edit;
 
         if (edit.tempo != null && !(edit.tempo > 0 && Float.isFinite(edit.tempo))) {
@@ -66,7 +69,7 @@ public class EditCommand {
             }
             this.instrumentMappings.put(from, this.parseTarget(parts[1]));
         }
-        if (!edit.customInstruments.isEmpty() && !this.format.equals(SongFormat.NBS)) {
+        if (!edit.customInstruments.isEmpty() && this.jobs.stream().anyMatch(job -> !job.format().equals(SongFormat.NBS))) {
             throw new ParameterException("--custom-instrument is only supported for NBS songs");
         }
         for (String mapping : edit.customInstruments) {
@@ -76,27 +79,36 @@ public class EditCommand {
             }
             this.customInstrumentMappings.put(parts[0], this.parseTarget(parts[1]));
         }
-        this.collectMetadataEdits();
+        for (Job job : this.jobs) {
+            this.metadataEdits.computeIfAbsent(job.format(), this::collectMetadataEdits);
+        }
+        boolean hasMetadataEdits = this.metadataEdits.values().stream().anyMatch(edits -> !edits.isEmpty());
 
         if (edit.tempo == null && !edit.precomputeTempo && this.instrumentMappings.isEmpty() && this.customInstrumentMappings.isEmpty()
-                && edit.octaveCorrection == null && edit.minVolume == null && !edit.removeDuplicates && this.metadataEdits.isEmpty()) {
+                && edit.octaveCorrection == null && edit.minVolume == null && !edit.removeDuplicates && !hasMetadataEdits) {
             throw new ParameterException("No edits specified. Use --help to see all available edit options");
         }
     }
 
     public void execute() {
+        BatchProcessor.run(this.jobs, this.edit.batch.failFast, true, job -> job.input().name(), this::edit);
+    }
+
+    private void edit(final Job job) {
+        File input = job.input().file();
+        List<Consumer<Song>> metadataEdits = this.metadataEdits.get(job.format());
         Song song;
         try {
-            String songName = IOUtils.isStd(this.input) ? null : IOUtils.getNameWithoutExtension(this.input);
-            song = NoteBlockLib.readSong(IOUtils.openInputStream(this.input), this.format, songName);
+            String songName = IOUtils.isStd(input) ? null : IOUtils.getNameWithoutExtension(input);
+            song = NoteBlockLib.readSong(IOUtils.openInputStream(input), job.format(), songName);
         } catch (Throwable t) {
             throw new ParameterException("Failed to read input file: " + t.getMessage(), t);
         }
 
         if (!this.hasNoteEdits()) {
             // Rebuilding the song loses NBS specific data like layer names, so only do it when the notes were changed
-            this.metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
-            this.write(song);
+            metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
+            this.write(job, song);
             return;
         }
 
@@ -126,10 +138,10 @@ public class EditCommand {
         }
 
         // Metadata
-        this.metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
+        metadataEdits.forEach(metadataEdit -> metadataEdit.accept(song));
 
-        SongFixer.fixForFormat(song, this.format, message -> IOUtils.log(this.output, message));
-        this.write(NoteBlockLib.convertSong(song, this.format));
+        SongFixer.fixForFormat(song, job.format(), message -> IOUtils.log(job.output(), message));
+        this.write(job, NoteBlockLib.convertSong(song, job.format()));
     }
 
     private boolean hasNoteEdits() {
@@ -138,10 +150,10 @@ public class EditCommand {
                 || this.edit.minVolume != null || this.edit.removeDuplicates;
     }
 
-    private void write(final Song song) {
+    private void write(final Job job, final Song song) {
         try {
-            NoteBlockLib.writeSong(song, IOUtils.openOutputStream(this.output));
-            IOUtils.log(this.output, "Successfully edited " + IOUtils.getName(this.input, "STDIN") + " and saved it to " + IOUtils.getName(this.output, "STDOUT"));
+            NoteBlockLib.writeSong(song, IOUtils.openOutputStream(job.output()));
+            IOUtils.log(job.output(), "Successfully edited " + IOUtils.getName(job.input().file(), "STDIN") + " and saved it to " + IOUtils.getName(job.output(), "STDOUT"));
         } catch (Throwable t) {
             throw new ParameterException("Failed to write output file: " + t.getMessage(), t);
         }
@@ -208,51 +220,57 @@ public class EditCommand {
         });
     }
 
-    private void collectMetadataEdits() {
-        this.string("--title", this.edit.title, Song::setTitle, Song::setTitle);
-        this.string("--author", this.edit.author, Song::setAuthor, Song::setAuthor);
-        this.string("--original-author", this.edit.originalAuthor, Song::setOriginalAuthor, Song::setOriginalAuthor);
-        this.string("--description", this.edit.description, Song::setDescription, null);
-        this.string("--source-file", this.edit.sourceFileName, NbsSong::setSourceFileName, null);
-        this.bool("--auto-save", this.edit.autoSave, NbsSong::setAutoSave);
-        this.integer("--auto-save-interval", this.edit.autoSaveInterval, 0, 255, NbsSong::setAutoSaveInterval, McSp2Song::setAutoSaveInterval);
-        this.integer("--time-signature", this.edit.timeSignature, 0, 255, NbsSong::setTimeSignature, null);
-        this.integer("--minutes-spent", this.edit.minutesSpent, 0, Integer.MAX_VALUE, NbsSong::setMinutesSpent, McSp2Song::setMinutesSpent);
-        this.integer("--left-clicks", this.edit.leftClicks, 0, Integer.MAX_VALUE, NbsSong::setLeftClicks, McSp2Song::setLeftClicks);
-        this.integer("--right-clicks", this.edit.rightClicks, 0, Integer.MAX_VALUE, NbsSong::setRightClicks, McSp2Song::setRightClicks);
-        this.integer("--note-blocks-added", this.edit.noteBlocksAdded, 0, Integer.MAX_VALUE, NbsSong::setNoteBlocksAdded, McSp2Song::setNoteBlocksAdded);
-        this.integer("--note-blocks-removed", this.edit.noteBlocksRemoved, 0, Integer.MAX_VALUE, NbsSong::setNoteBlocksRemoved, McSp2Song::setNoteBlocksRemoved);
-        this.bool("--loop", this.edit.loop, NbsSong::setLoop);
-        this.integer("--max-loop-count", this.edit.maxLoopCount, 0, 255, NbsSong::setMaxLoopCount, null);
-        this.integer("--loop-start-tick", this.edit.loopStartTick, 0, Short.MAX_VALUE, (song, value) -> song.setLoopStartTick((short) (int) value), null);
+    private List<Consumer<Song>> collectMetadataEdits(final SongFormat format) {
+        List<Consumer<Song>> edits = new ArrayList<>();
+        this.string(edits, format, "--title", this.edit.title, Song::setTitle, Song::setTitle);
+        this.string(edits, format, "--author", this.edit.author, Song::setAuthor, Song::setAuthor);
+        this.string(edits, format, "--original-author", this.edit.originalAuthor, Song::setOriginalAuthor, Song::setOriginalAuthor);
+        this.string(edits, format, "--description", this.edit.description, Song::setDescription, null);
+        this.string(edits, format, "--source-file", this.edit.sourceFileName, NbsSong::setSourceFileName, null);
+        this.bool(edits, format, "--auto-save", this.edit.autoSave, NbsSong::setAutoSave);
+        this.integer(edits, format, "--auto-save-interval", this.edit.autoSaveInterval, 0, 255, NbsSong::setAutoSaveInterval, McSp2Song::setAutoSaveInterval);
+        this.integer(edits, format, "--time-signature", this.edit.timeSignature, 0, 255, NbsSong::setTimeSignature, null);
+        this.integer(edits, format, "--minutes-spent", this.edit.minutesSpent, 0, Integer.MAX_VALUE, NbsSong::setMinutesSpent, McSp2Song::setMinutesSpent);
+        this.integer(edits, format, "--left-clicks", this.edit.leftClicks, 0, Integer.MAX_VALUE, NbsSong::setLeftClicks, McSp2Song::setLeftClicks);
+        this.integer(edits, format, "--right-clicks", this.edit.rightClicks, 0, Integer.MAX_VALUE, NbsSong::setRightClicks, McSp2Song::setRightClicks);
+        this.integer(edits, format, "--note-blocks-added", this.edit.noteBlocksAdded, 0, Integer.MAX_VALUE, NbsSong::setNoteBlocksAdded, McSp2Song::setNoteBlocksAdded);
+        this.integer(edits, format, "--note-blocks-removed", this.edit.noteBlocksRemoved, 0, Integer.MAX_VALUE, NbsSong::setNoteBlocksRemoved, McSp2Song::setNoteBlocksRemoved);
+        this.bool(edits, format, "--loop", this.edit.loop, NbsSong::setLoop);
+        this.integer(edits, format, "--max-loop-count", this.edit.maxLoopCount, 0, 255, NbsSong::setMaxLoopCount, null);
+        this.integer(edits, format, "--loop-start-tick", this.edit.loopStartTick, 0, Short.MAX_VALUE, (song, value) -> song.setLoopStartTick((short) (int) value), null);
+        return edits;
     }
 
-    private void string(final String option, final String value, final BiConsumer<NbsSong, String> nbs, final BiConsumer<McSp2Song, String> mcsp2) {
+    private void string(final List<Consumer<Song>> edits, final SongFormat format, final String option, final String value, final BiConsumer<NbsSong, String> nbs, final BiConsumer<McSp2Song, String> mcsp2) {
         if (value == null) return;
-        this.metadata(option, nbs == null ? null : song -> nbs.accept(song, value), mcsp2 == null ? null : song -> mcsp2.accept(song, value));
+        this.metadata(edits, format, option, nbs == null ? null : song -> nbs.accept(song, value), mcsp2 == null ? null : song -> mcsp2.accept(song, value));
     }
 
-    private void bool(final String option, final Boolean value, final BiConsumer<NbsSong, Boolean> nbs) {
+    private void bool(final List<Consumer<Song>> edits, final SongFormat format, final String option, final Boolean value, final BiConsumer<NbsSong, Boolean> nbs) {
         if (value == null) return;
-        this.metadata(option, song -> nbs.accept(song, value), null);
+        this.metadata(edits, format, option, song -> nbs.accept(song, value), null);
     }
 
-    private void integer(final String option, final Integer value, final int min, final int max, final BiConsumer<NbsSong, Integer> nbs, final BiConsumer<McSp2Song, Integer> mcsp2) {
+    private void integer(final List<Consumer<Song>> edits, final SongFormat format, final String option, final Integer value, final int min, final int max, final BiConsumer<NbsSong, Integer> nbs, final BiConsumer<McSp2Song, Integer> mcsp2) {
         if (value == null) return;
         if (value < min || value > max) {
             throw new ParameterException(option + " must be between " + min + " and " + max + ": " + value);
         }
-        this.metadata(option, nbs == null ? null : song -> nbs.accept(song, value), mcsp2 == null ? null : song -> mcsp2.accept(song, value));
+        this.metadata(edits, format, option, nbs == null ? null : song -> nbs.accept(song, value), mcsp2 == null ? null : song -> mcsp2.accept(song, value));
     }
 
-    private void metadata(final String option, final Consumer<NbsSong> nbs, final Consumer<McSp2Song> mcsp2) {
-        if (this.format.equals(SongFormat.NBS) && nbs != null) {
-            this.metadataEdits.add(song -> nbs.accept((NbsSong) song));
-        } else if (this.format.equals(SongFormat.MCSP2) && mcsp2 != null) {
-            this.metadataEdits.add(song -> mcsp2.accept((McSp2Song) song));
+    private void metadata(final List<Consumer<Song>> edits, final SongFormat format, final String option, final Consumer<NbsSong> nbs, final Consumer<McSp2Song> mcsp2) {
+        if (format.equals(SongFormat.NBS) && nbs != null) {
+            edits.add(song -> nbs.accept((NbsSong) song));
+        } else if (format.equals(SongFormat.MCSP2) && mcsp2 != null) {
+            edits.add(song -> mcsp2.accept((McSp2Song) song));
         } else {
-            throw new ParameterException(option + " is not supported for " + this.format.name().toUpperCase(Locale.ROOT) + " songs");
+            throw new ParameterException(option + " is not supported for " + format.name().toUpperCase(Locale.ROOT) + " songs");
         }
+    }
+
+
+    private record Job(InputFile input, SongFormat format, File output) {
     }
 
 }

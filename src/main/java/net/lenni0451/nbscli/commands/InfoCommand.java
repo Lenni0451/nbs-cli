@@ -2,6 +2,8 @@ package net.lenni0451.nbscli.commands;
 
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
+import net.lenni0451.nbscli.model.InputFile;
+import net.lenni0451.nbscli.utils.BatchProcessor;
 import net.lenni0451.nbscli.utils.IOUtils;
 import net.raphimc.noteblocklib.NoteBlockLib;
 import net.raphimc.noteblocklib.format.SongFormat;
@@ -11,32 +13,44 @@ import net.raphimc.noteblocklib.format.nbs.model.NbsSong;
 import net.raphimc.noteblocklib.util.SongUtil;
 
 import java.io.File;
+import java.util.List;
 import java.util.Set;
 
 public class InfoCommand {
 
     private static final String SPACER = "  ";
 
-    private final File file;
+    private final List<InputFile> files;
     private final boolean full;
+    private final boolean failFast;
+    private boolean first = true;
 
     public InfoCommand(final CLI.Info info) {
-        if (!IOUtils.isStd(info.file) && !info.file.isFile()) {
-            throw new ParameterException("Input file does not exist or is not a file: " + info.file.getAbsolutePath());
+        this.files = IOUtils.resolveInputs(info.files, info.batch.recursive, info.batch.ignoreExtension ? file -> true : IOUtils.hasExtension("nbs"));
+        if (this.files.isEmpty()) {
+            throw new ParameterException("No NBS files found in the given folders");
         }
-        this.file = info.file;
         this.full = info.full;
+        this.failFast = info.batch.failFast;
     }
 
     public void execute() {
+        BatchProcessor.run(this.files, this.failFast, false, InputFile::name, input -> {
+            if (!this.first) System.out.println();
+            this.first = false;
+            this.execute(input.file());
+        });
+    }
+
+    private void execute(final File file) {
         NbsSong song;
         try {
-            song = (NbsSong) NoteBlockLib.readSong(IOUtils.openInputStream(this.file), SongFormat.NBS, IOUtils.isStd(this.file) ? null : IOUtils.getNameWithoutExtension(this.file));
+            song = (NbsSong) NoteBlockLib.readSong(IOUtils.openInputStream(file), SongFormat.NBS, IOUtils.isStd(file) ? null : IOUtils.getNameWithoutExtension(file));
         } catch (Throwable t) {
             throw new ParameterException("Failed to read NBS file: " + t.getMessage(), t);
         }
 
-        System.out.println("Information about " + IOUtils.getName(this.file, "STDIN") + ":");
+        System.out.println("Information about " + IOUtils.getName(file, "STDIN") + ":");
         this.print("Title", song.getTitle());
         this.print("Author", song.getAuthor());
         this.print("Original Author", song.getOriginalAuthor());

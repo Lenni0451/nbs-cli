@@ -34,6 +34,10 @@ public enum AudioFileFormat {
         throw new ParameterException("Invalid output format: " + formatName + ". Supported formats are: " + FORMATS_LIST);
     }
 
+    public String getExtension() {
+        return this.name().toLowerCase(Locale.ROOT);
+    }
+
     @Override
     public String toString() {
         return this == OPUS ? "Opus" : this.name().toUpperCase(Locale.ROOT);

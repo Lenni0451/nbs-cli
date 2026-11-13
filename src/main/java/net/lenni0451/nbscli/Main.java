@@ -54,16 +54,24 @@ public class Main {
                 default -> jCommander.usage();
             }
         } catch (ParameterException e) {
-            System.err.println(e.getMessage());
-            Throwable cause = e;
-            while ((cause = cause.getCause()) != null) {
-                System.err.println("Caused by: " + cause.getMessage());
-            }
+            printError(e);
             System.exit(1);
         } catch (Throwable t) {
             System.err.println("An unexpected error occurred: " + t.getMessage());
             t.printStackTrace(System.err);
             System.exit(2);
+        }
+    }
+
+    public static void printError(final Throwable t) {
+        if (t instanceof ParameterException) {
+            System.err.println(t.getMessage());
+        } else {
+            System.err.println("(" + t.getClass().getSimpleName() + ") " + t.getMessage());
+        }
+        Throwable cause = t;
+        while ((cause = cause.getCause()) != null) {
+            System.err.println("Caused by: (" + cause.getClass().getSimpleName() + ") " + cause.getMessage());
         }
     }
 

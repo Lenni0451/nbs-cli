@@ -7,6 +7,7 @@ import net.raphimc.noteblocklib.format.SongFormat;
 import java.io.File;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Predicate;
 
 public class ConverterFormats {
 
@@ -41,6 +42,18 @@ public class ConverterFormats {
             throw new ParameterException("Invalid " + io + " format: " + formatName + ". Supported formats are: " + formatsList);
         }
         return format;
+    }
+
+    public static Predicate<File> folderFilter(final String cliName, final boolean ignoreExtension, final Map<String, SongFormat> formats, final String formatsList) {
+        if (ignoreExtension) {
+            if (cliName == null) throw new ParameterException("--ignore-extension requires --input-format, as the format can't be determined from the file extension");
+            return file -> true;
+        }
+        if (cliName != null) {
+            SongFormat format = parse(cliName, null, "input", formats, formatsList);
+            return file -> format.equals(formats.get(IOUtils.getExtension(file).toLowerCase(Locale.ROOT)));
+        }
+        return file -> formats.containsKey(IOUtils.getExtension(file).toLowerCase(Locale.ROOT));
     }
 
 }

@@ -4,10 +4,8 @@ import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
 import net.lenni0451.nbscli.model.AudioFileFormat;
 import net.lenni0451.nbscli.model.ConverterFormats;
-import net.lenni0451.nbscli.utils.AudioOptionParser;
-import net.lenni0451.nbscli.utils.IOUtils;
-import net.lenni0451.nbscli.utils.ProgressBar;
-import net.lenni0451.nbscli.utils.ResourceSoundProvider;
+import net.lenni0451.nbscli.model.InputFile;
+import net.lenni0451.nbscli.utils.*;
 import net.raphimc.audiomixer.AudioMixer;
 import net.raphimc.audiomixer.io.AudioOutputStream;
 import net.raphimc.audiomixer.io.flac.FlacAudioOutputStream;
@@ -41,18 +39,14 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Supplier;
 
 public class RenderCommand {
 
     private static final int DEFAULT_PRE_RENDER_MEMORY = 512;
 
-    private final File input;
-    private final File output;
-    private final SongFormat inputFormat;
+    private final List<Job> jobs = new ArrayList<>();
     private final AudioFileFormat outputFormat;
     private final AudioFormat audioFormat;
     private final NoteBlockRenderer.Limiter limiter;
@@ -66,14 +60,16 @@ public class RenderCommand {
     private final OggOpusAudioOutputStream.Encoding opusEncoding;
 
     public RenderCommand(final CLI.Render render) {
-        if (!IOUtils.isStd(render.inputFile) && !render.inputFile.isFile()) {
-            throw new ParameterException("Input file does not exist or is not a file: " + render.inputFile.getAbsolutePath());
+        List<InputFile> inputs = IOUtils.resolveInputs(render.inputFiles, render.batch.recursive, ConverterFormats.folderFilter(render.inputFormat, render.batch.ignoreExtension, ConverterFormats.INPUT_FORMATS_MAP, ConverterFormats.INPUT_FORMATS_LIST));
+        if (inputs.isEmpty()) {
+            throw new ParameterException("No supported song files found in the given folders");
         }
-        if (!IOUtils.isStd(render.outputFile) && render.outputFile.exists() && !render.overwrite) {
-            throw new ParameterException("Output file already exists and overwrite is not allowed: " + render.outputFile.getAbsolutePath());
-        }
-        if (!IOUtils.isStd(render.outputFile) && render.outputFile.isDirectory()) {
-            throw new ParameterException("Output file is a directory: " + render.outputFile.getAbsolutePath());
+        boolean batch = IOUtils.isBatch(render.inputFiles);
+        if (batch) {
+            IOUtils.validateOutputFolder(render.outputFile);
+            if (render.format == null) {
+                throw new ParameterException("The output format must be specified with --format when rendering multiple files or folders");
+            }
         }
         if (render.soundsDir != null && !render.soundsDir.isDirectory()) {
             throw new ParameterException("Sounds folder does not exist or is not a folder: " + render.soundsDir.getAbsolutePath());
@@ -87,10 +83,15 @@ public class RenderCommand {
         if (render.preRenderMemory != null && render.preRenderMemory < 0) {
             throw new ParameterException("Pre-render memory must be at least 0: " + render.preRenderMemory);
         }
-        this.input = render.inputFile;
-        this.output = render.outputFile;
-        this.inputFormat = ConverterFormats.parse(render.inputFormat, this.input, "input", ConverterFormats.INPUT_FORMATS_MAP, ConverterFormats.INPUT_FORMATS_LIST);
-        this.outputFormat = AudioFileFormat.parse(render.format, this.output);
+        this.outputFormat = AudioFileFormat.parse(render.format, render.outputFile);
+        Map<InputFile, File> outputs = new LinkedHashMap<>();
+        for (InputFile input : inputs) {
+            SongFormat inputFormat = ConverterFormats.parse(render.inputFormat, input.file(), "input", ConverterFormats.INPUT_FORMATS_MAP, ConverterFormats.INPUT_FORMATS_LIST);
+            File output = batch ? input.getOutputFile(render.outputFile, this.outputFormat.getExtension()) : render.outputFile;
+            outputs.put(input, output);
+            this.jobs.add(new Job(input, inputFormat, output));
+        }
+        IOUtils.validateOutputFiles(outputs, render.overwrite);
         this.audioFormat = AudioOptionParser.parseAudioFormat(render.sampleRate, render.channels);
         this.limiter = AudioOptionParser.parseLimiter(render.limiter);
         this.resampler = AudioOptionParser.parseResampler(render.resampler);
@@ -110,10 +111,15 @@ public class RenderCommand {
     }
 
     public void execute() {
+        BatchProcessor.run(this.jobs, this.render.batch.failFast, !this.render.quiet, job -> job.input().name(), this::render);
+    }
+
+    private void render(final Job job) {
+        File input = job.input().file();
         Song song;
         try {
-            String songName = IOUtils.isStd(this.input) ? null : IOUtils.getNameWithoutExtension(this.input);
-            song = NoteBlockLib.readSong(IOUtils.openInputStream(this.input), this.inputFormat, songName);
+            String songName = IOUtils.isStd(input) ? null : IOUtils.getNameWithoutExtension(input);
+            song = NoteBlockLib.readSong(IOUtils.openInputStream(input), job.inputFormat(), songName);
         } catch (Throwable t) {
             throw new ParameterException("Failed to read input file: " + t.getMessage(), t);
         }
@@ -136,7 +142,7 @@ public class RenderCommand {
             }
             if (this.render.stream) {
                 progress.start("Rendering");
-                this.stream(renderer, progress);
+                this.stream(job.output(), renderer, progress);
                 progress.finish();
             } else {
                 progress.start("Rendering");
@@ -144,17 +150,17 @@ public class RenderCommand {
                 progress.finish();
 
                 progress.start("Encoding");
-                this.write(song, buffer, progress);
+                this.write(job.output(), song, buffer, progress);
                 progress.finish();
             }
         }
         if (!this.render.quiet) {
-            IOUtils.log(this.output, "Successfully rendered " + IOUtils.getName(this.input, "STDIN") + " to " + IOUtils.getName(this.output, "STDOUT") + " in " + this.outputFormat + " format");
+            IOUtils.log(job.output(), "Successfully rendered " + IOUtils.getName(input, "STDIN") + " to " + IOUtils.getName(job.output(), "STDOUT") + " in " + this.outputFormat + " format");
         }
     }
 
-    private void write(final Song song, final AudioBuffer buffer, final ProgressBar progress) {
-        this.writeOutput(song, buffer.sampleCount(), audioOutputStream -> {
+    private void write(final File output, final Song song, final AudioBuffer buffer, final ProgressBar progress) {
+        this.writeOutput(output, song, buffer.sampleCount(), audioOutputStream -> {
             float[] samples = buffer.samples();
             int chunkSize = this.audioFormat.millisToSampleCount(1000F);
             for (int offset = 0; offset < samples.length; offset += chunkSize) {
@@ -165,14 +171,14 @@ public class RenderCommand {
         });
     }
 
-    private void stream(final NoteBlockRenderer renderer, final ProgressBar progress) {
+    private void stream(final File output, final NoteBlockRenderer renderer, final ProgressBar progress) {
         // Same processing as NoteBlockRenderer.Limiter, but applied by the root mixer to every rendered buffer.
         // StreamingNoteBlockRenderer isn't used, because its mixer always clips, even without a limiter
         AudioMixer mixer = renderer.getRootMixer();
         if (this.limiter == NoteBlockRenderer.Limiter.WINDOWED) mixer.processors().add(new LimiterProcessor());
         mixer.processors().add(new GainProcessor(this.render.volume / 100F));
         if (this.limiter == NoteBlockRenderer.Limiter.WINDOWED) mixer.processors().add(new HardClipProcessor());
-        this.writeOutput(renderer.getSong(), -1, audioOutputStream -> {
+        this.writeOutput(output, renderer.getSong(), -1, audioOutputStream -> {
             while (!renderer.hasReachedEnd()) {
                 audioOutputStream.write(renderer.tick());
                 progress.update(renderer.getProgress());
@@ -184,22 +190,23 @@ public class RenderCommand {
         });
     }
 
-    private void writeOutput(final Song song, final long sampleCount, final AudioWriter writer) {
-        try (OutputStream outputStream = this.openOutputStream();
+    private void writeOutput(final File output, final Song song, final long sampleCount, final AudioWriter writer) {
+        try (OutputStream outputStream = this.openOutputStream(output);
              AudioOutputStream audioOutputStream = this.createAudioOutputStream(outputStream, song, sampleCount)) {
             writer.write(audioOutputStream);
         } catch (Throwable t) {
-            if (!IOUtils.isStd(this.output)) this.output.delete(); // Don't leave a broken file behind
+            if (!IOUtils.isStd(output)) output.delete(); // Don't leave a broken file behind
             throw new ParameterException("Failed to write output file: " + t.getMessage(), t);
         }
     }
 
-    private OutputStream openOutputStream() throws IOException {
-        if (IOUtils.isStd(this.output)) {
-            return new BufferedOutputStream(IOUtils.openOutputStream(this.output));
+    private OutputStream openOutputStream(final File output) throws IOException {
+        if (IOUtils.isStd(output)) {
+            return new BufferedOutputStream(IOUtils.openOutputStream(output));
         }
         // Seeking allows FLAC and MP3 to write the song length and seek information after encoding
-        return new SeekableBufferedOutputStream(new SeekableFileOutputStream(this.output));
+        IOUtils.createParentFolders(output);
+        return new SeekableBufferedOutputStream(new SeekableFileOutputStream(output));
     }
 
     private AudioOutputStream createAudioOutputStream(final OutputStream outputStream, final Song song, final long sampleCount) throws IOException {
@@ -250,6 +257,9 @@ public class RenderCommand {
     @FunctionalInterface
     private interface AudioWriter {
         void write(AudioOutputStream audioOutputStream) throws IOException;
+    }
+
+    private record Job(InputFile input, SongFormat inputFormat, File output) {
     }
 
 }
