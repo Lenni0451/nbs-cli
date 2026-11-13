@@ -26,6 +26,11 @@ public class CLI {
                 help = true,
                 order = 1)
         public boolean version;
+
+        @Parameter(names = {"--stacktrace"},
+                description = "Show the stacktrace of any error that occurs",
+                order = 2)
+        public boolean stacktrace = false;
     }
 
     public static class BatchOptions {

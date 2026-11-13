@@ -12,6 +12,8 @@ import net.lenni0451.nbscli.utils.CommandUsageFormatter;
 
 public class Main {
 
+    private static boolean printStacktrace = false;
+
     public static void main(final String[] args) {
         CLI.Main main = new CLI.Main();
         CLI.Info info = new CLI.Info();
@@ -45,6 +47,8 @@ public class Main {
                 command.usage();
                 return;
             }
+
+            printStacktrace = main.stacktrace;
             switch (jCommander.getParsedCommand()) {
                 case "info" -> new InfoCommand(info).execute();
                 case "convert" -> new ConvertCommand(convert).execute();
@@ -57,8 +61,8 @@ public class Main {
             printError(e);
             System.exit(1);
         } catch (Throwable t) {
-            System.err.println("An unexpected error occurred: " + t.getMessage());
-            t.printStackTrace(System.err);
+            System.err.println("An unexpected error occurred:");
+            printError(t);
             System.exit(2);
         }
     }
@@ -72,6 +76,9 @@ public class Main {
         Throwable cause = t;
         while ((cause = cause.getCause()) != null) {
             System.err.println("Caused by: (" + cause.getClass().getSimpleName() + ") " + cause.getMessage());
+        }
+        if (printStacktrace) {
+            t.printStackTrace(System.err);
         }
     }
 
