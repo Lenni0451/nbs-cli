@@ -2,10 +2,14 @@ package net.lenni0451.nbscli.commands;
 
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
+import net.lenni0451.nbscli.Main;
 import net.lenni0451.nbscli.model.AudioFileFormat;
 import net.lenni0451.nbscli.model.ConverterFormats;
 import net.lenni0451.nbscli.model.InputFile;
-import net.lenni0451.nbscli.utils.*;
+import net.lenni0451.nbscli.utils.AudioOptionParser;
+import net.lenni0451.nbscli.utils.BatchProcessor;
+import net.lenni0451.nbscli.utils.IOUtils;
+import net.lenni0451.nbscli.utils.ProgressBar;
 import net.raphimc.audiomixer.AudioMixer;
 import net.raphimc.audiomixer.io.AudioOutputStream;
 import net.raphimc.audiomixer.io.flac.FlacAudioOutputStream;
@@ -29,9 +33,6 @@ import net.raphimc.noteblocklib.model.note.Instrument;
 import net.raphimc.noteblocklib.model.song.Song;
 import net.raphimc.noteblockrenderer.AudioMixerNoteBlockRenderer;
 import net.raphimc.noteblockrenderer.NoteBlockRenderer;
-import net.raphimc.noteblockrenderer.provider.SoundProvider;
-import net.raphimc.noteblockrenderer.provider.impl.NoteBlockStudioSoundProvider;
-import net.raphimc.noteblockrenderer.provider.impl.UrlSoundProvider;
 import net.raphimc.noteblockrenderer.util.MetadataUtil;
 import org.concentus.OpusSignal;
 
@@ -133,7 +134,7 @@ public class RenderCommand {
                 .withTimingJitter(this.render.timingJitter)
                 .withMultiThreaded(this.render.multithreaded)
                 .withMaxSimultaneousSoundCount(this.render.maxSounds);
-        NoteBlockRenderer renderer = new NoteBlockRenderer(song, this.audioFormat, this.createSoundProvider(), options);
+        NoteBlockRenderer renderer = new NoteBlockRenderer(song, this.audioFormat, Main.createSoundProvider(this.render.soundsDir), options);
         try (ProgressBar progress = ProgressBar.open(this.render.quiet)) {
             if (this.preRenderMemory > 0) {
                 progress.start("Pre-rendering");
@@ -227,18 +228,6 @@ public class RenderCommand {
             name = "instrument '" + instrument + "'";
         }
         System.err.println("Failed to load the sound for " + name + ", its notes will not be played. Use --sounds-dir to specify the folder containing the sound file");
-    }
-
-    private SoundProvider createSoundProvider() {
-        SoundProvider soundProvider = new ResourceSoundProvider().then(new UrlSoundProvider());
-        try {
-            soundProvider = new NoteBlockStudioSoundProvider().then(soundProvider);
-        } catch (Throwable ignored) {
-        }
-        if (this.render.soundsDir != null) {
-            soundProvider = new NoteBlockStudioSoundProvider(this.render.soundsDir).then(soundProvider);
-        }
-        return soundProvider;
     }
 
     private Map<String, List<String>> getVorbisTags(final Song song) {

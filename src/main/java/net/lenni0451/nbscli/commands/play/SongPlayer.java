@@ -32,7 +32,7 @@ class SongPlayer extends NoteBlockPlayer {
         int target = this.getSong().millisecondsToTick(Math.max(0, this.getMillisecondPosition() + offsetMillis));
         this.setTick(Math.min(target, this.getSong().getNotes().getLengthInTicks()));
         this.getMixer().clear(); // Stop the sounds that are still ringing from the old position
-        this.getSourceDataLineWriter().flush();
+        this.getSourceDataLineWriter().getSourceDataLine().flush();
     }
 
     synchronized boolean isMixerEmpty() {

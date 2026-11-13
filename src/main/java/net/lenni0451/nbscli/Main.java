@@ -9,6 +9,11 @@ import net.lenni0451.nbscli.commands.RenderCommand;
 import net.lenni0451.nbscli.commands.play.PlayCommand;
 import net.lenni0451.nbscli.utils.CommandListUsageFormatter;
 import net.lenni0451.nbscli.utils.CommandUsageFormatter;
+import net.raphimc.noteblockrenderer.provider.SoundProvider;
+import net.raphimc.noteblockrenderer.provider.impl.*;
+
+import javax.annotation.Nullable;
+import java.io.File;
 
 public class Main {
 
@@ -80,6 +85,18 @@ public class Main {
         if (printStacktrace) {
             t.printStackTrace(System.err);
         }
+    }
+
+    public static SoundProvider createSoundProvider(@Nullable final File soundsDir) {
+        SoundProvider soundProvider = new ResourceSoundProvider().then(new UrlSoundProvider());
+        try {
+            soundProvider = new NoteBlockStudioSoundProvider().then(soundProvider);
+        } catch (Throwable ignored) {
+        }
+        if (soundsDir != null) {
+            soundProvider = new DirectorySoundProvider(soundsDir).then(soundProvider);
+        }
+        return soundProvider.then(new NoOpSoundProvider());
     }
 
 }

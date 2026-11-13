@@ -2,19 +2,16 @@ package net.lenni0451.nbscli.commands.play;
 
 import com.beust.jcommander.ParameterException;
 import net.lenni0451.nbscli.CLI;
+import net.lenni0451.nbscli.Main;
 import net.lenni0451.nbscli.model.ConverterFormats;
 import net.lenni0451.nbscli.utils.AudioOptionParser;
 import net.lenni0451.nbscli.utils.IOUtils;
-import net.lenni0451.nbscli.utils.ResourceSoundProvider;
 import net.raphimc.noteblocklib.NoteBlockLib;
 import net.raphimc.noteblocklib.format.SongFormat;
 import net.raphimc.noteblocklib.format.nbs.model.NbsCustomInstrument;
 import net.raphimc.noteblocklib.model.note.Instrument;
 import net.raphimc.noteblocklib.model.song.Song;
 import net.raphimc.noteblockrenderer.AudioMixerNoteBlockRenderer;
-import net.raphimc.noteblockrenderer.provider.SoundProvider;
-import net.raphimc.noteblockrenderer.provider.impl.NoteBlockStudioSoundProvider;
-import net.raphimc.noteblockrenderer.provider.impl.UrlSoundProvider;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
@@ -86,7 +83,7 @@ public class PlayCommand {
                 .withMultiThreaded(this.play.multithreaded)
                 .withMaxSimultaneousSoundCount(this.play.maxSounds);
 
-        try (SongPlayer player = new SongPlayer(this.openLine(), song, this.createSoundProvider(), options, startTick);
+        try (SongPlayer player = new SongPlayer(this.openLine(), song, Main.createSoundProvider(this.play.soundsDir), options, startTick);
              PlayerView view = this.openView(player)) {
             player.getRootMixer().gain().set(this.play.volume / 100F);
             player.setPaused(false);
@@ -127,18 +124,6 @@ public class PlayCommand {
     private ParameterException unsupportedFormat(final Exception cause) {
         // The cause is printed by Main, so it isn't repeated in the message
         return new ParameterException("Failed to open the audio device with " + (int) this.audioFormat.getSampleRate() + " Hz and " + this.audioFormat.getChannels() + " channel(s)", cause);
-    }
-
-    private SoundProvider createSoundProvider() {
-        SoundProvider soundProvider = new ResourceSoundProvider().then(new UrlSoundProvider());
-        try {
-            soundProvider = new NoteBlockStudioSoundProvider().then(soundProvider);
-        } catch (Throwable ignored) {
-        }
-        if (this.play.soundsDir != null) {
-            soundProvider = new NoteBlockStudioSoundProvider(this.play.soundsDir).then(soundProvider);
-        }
-        return soundProvider;
     }
 
     private void onSoundLoadFailure(final Instrument instrument, final Throwable t) {
