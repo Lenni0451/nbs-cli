@@ -1,5 +1,5 @@
 [versions]
-jline = "4.4.8"
+jline = "4.6.0"
 
 [libraries]
 findbugs = { module = "com.google.code.findbugs:jsr305", version = "3.0.2" }
